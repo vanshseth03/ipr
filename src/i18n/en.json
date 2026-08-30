@@ -1,0 +1,57 @@
+{
+  "common": {
+    "loading": "Loading",
+    "cancel": "Cancel",
+    "close": "Close",
+    "send": "Send",
+    "listen": "Listen",
+    "stop": "Stop",
+    "delete": "Delete",
+    "clearAll": "Clear All",
+    "retry": "Retry",
+    "error": "Error"
+  },
+  "chat": {
+    "title": "Ayurveda IPR Assistant",
+    "subtitle": "TKDL & Patent Advisor",
+    "placeholder": "Ask about Ayurveda prior art, Section 3(p), or TKDL...",
+    "source": "Source",
+    "confidence": "Confidence",
+    "talkToExpert": "Talk to an Expert",
+    "suggestedInquiries": "Suggested Inquiries:"
+  },
+  "scan": {
+    "title": "Document & Patent Scanner",
+    "subtitle": "Upload patent drafts, research papers, or manuscripts to check TKDL prior art",
+    "selectDoc": "Pick PDF / Document",
+    "selectImage": "Pick Image",
+    "runAnalysis": "Run TKDL & Prior Art Analysis",
+    "analyzing": "Extracting botanical claims and searching 450,000+ TKDL records",
+    "reportTitle": "Analysis & Prior Art Report",
+    "discussWithAI": "Discuss Findings with AI Assistant"
+  },
+  "classify": {
+    "title": "Formulation Classifier",
+    "subtitle": "Evaluate herbal synergy, Section 3(p) patent eligibility, and TKDL prior art overlap",
+    "step1Title": "Formulation & Classical Source",
+    "step2Title": "Botanical Ingredients List",
+    "step3Title": "Regulatory & IPR Category",
+    "runClassification": "Evaluate Classification & Synergy",
+    "reportTitle": "Classification Report"
+  },
+  "history": {
+    "title": "History & Saved Reports",
+    "subtitle": "Review past TKDL searches, document scans, and formulation classifications",
+    "emptyTitle": "No History Recorded",
+    "emptyText": "Your previous chat conversations, document scans, and classification reports will appear here."
+  },
+  "settings": {
+    "title": "Settings & Preferences",
+    "subtitle": "Manage language, legal jurisdiction defaults, backend host, and disclaimers",
+    "language": "Language Preference",
+    "jurisdiction": "Legal Jurisdiction Default",
+    "backend": "API Server & Host Config",
+    "disclaimer": "Regulatory Disclaimer"
+  },
+  "disclaimer": "Information provided by this assistant is for educational purposes and is not legal advice."
+}
