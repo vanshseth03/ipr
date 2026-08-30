@@ -1,0 +1,436 @@
+import React, { useState } from 'react';
+import {
+  StyleSheet,
+  Text,
+  View,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+  Platform,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { FileText, Camera, Search, Leaf, ScrollText, MessageSquare } from 'lucide-react-native';
+
+import FileUploadButton from '../../components/upload/FileUploadButton';
+import FileCard from '../../components/upload/FileCard';
+import LoadingDots from '../../components/common/LoadingDots';
+
+import { useFileUpload } from '../../hooks/useFileUpload';
+import { useHistoryStore } from '../../store/historyStore';
+import { useChatStore } from '../../store/chatStore';
+import { colors, radii, spacing, typography } from '../../constants/theme';
+
+export default function ScanScreen() {
+  const router = useRouter();
+  const { file, selectDocument, selectImage, upload, isUploading, clearFile } =
+    useFileUpload();
+  const { addItem: addHistoryItem } = useHistoryStore();
+  const { addMessage } = useChatStore();
+
+  const [analysisResult, setAnalysisResult] = useState(null);
+
+  const handleAnalyze = async () => {
+    if (!file) {
+      Alert.alert('No File Selected', 'Please select a document or image first.');
+      return;
+    }
+
+    setAnalysisResult(null);
+
+    try {
+      const res = await upload();
+
+      setAnalysisResult(res);
+
+      addHistoryItem({
+        type: 'scan',
+        title: `Document Analysis: ${res.filename}`,
+        summary: `Prior art score: ${res.priorArtScore}%, Patentability: ${res.patentabilityScore}%`,
+        data: res,
+      });
+    } catch (err) {
+      Alert.alert('Analysis Failed', err.message || 'Unable to analyze file.');
+    }
+  };
+
+  const handleSendToChat = () => {
+    if (!analysisResult) return;
+
+    addMessage({
+      id: `msg-${Date.now()}`,
+      role: 'user',
+      content: `I scanned document **${analysisResult.filename}**.\n\nKey extracted claims: ${analysisResult.keyClaims?.join(', ')}.\nDetected herbs: ${analysisResult.detectedHerbs?.join(', ')}.\nPrior art overlap: ${analysisResult.priorArtScore}%. How can I restructure this under Section 3(p)?`,
+    });
+
+    router.push('/chat');
+  };
+
+  return (
+    <SafeAreaView style={styles.safeArea} edges={['bottom', 'left', 'right']}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Document & Patent Scanner</Text>
+        <Text style={styles.headerSubtitle}>
+          Upload patent drafts, research papers, or classical manuscripts to check TKDL prior art
+        </Text>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>1. Select Source Document</Text>
+          <Text style={styles.cardDescription}>
+            Support PDF, DOCX, TXT, or scanned images of herbal formulations.
+          </Text>
+
+          <View style={styles.buttonRow}>
+            <View style={styles.flex1}>
+              <FileUploadButton
+                label="Pick PDF / Document"
+                icon={FileText}
+                onPress={selectDocument}
+                disabled={isUploading}
+              />
+            </View>
+            <View style={styles.flex1}>
+              <TouchableOpacity
+                style={styles.imageButton}
+                onPress={selectImage}
+                disabled={isUploading}
+              >
+                <Camera size={16} color={colors.textPrimary} strokeWidth={2.25} />
+                <Text style={styles.imageButtonText}>Pick Image</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {file && (
+            <View style={styles.filePreviewBox}>
+              <FileCard file={file} />
+              <TouchableOpacity style={styles.clearBtn} onPress={clearFile}>
+                <Text style={styles.clearBtnText}>Remove File</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={[
+              styles.analyzeButton,
+              (!file || isUploading) && styles.disabledBtn,
+            ]}
+            onPress={handleAnalyze}
+            disabled={!file || isUploading}
+          >
+            {isUploading ? (
+              <ActivityIndicator color={colors.textOnBrand} />
+            ) : (
+              <>
+                <Search size={16} color={colors.textOnBrand} strokeWidth={2.25} />
+                <Text style={styles.analyzeButtonText}>Run TKDL & Prior Art Analysis</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        {isUploading && (
+          <View style={styles.loadingCard}>
+            <LoadingDots label="Extracting botanical claims and searching 450,000+ TKDL records" />
+          </View>
+        )}
+
+        {analysisResult && (
+          <View style={styles.resultsCard}>
+            <View style={styles.resultHeader}>
+              <Text style={styles.resultTitle}>2. Analysis & Prior Art Report</Text>
+              <View style={styles.scoreBadge}>
+                <Text style={styles.scoreBadgeText}>
+                  {analysisResult.priorArtScore}% Overlap
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.meterContainer}>
+              <View style={styles.meterLabelRow}>
+                <Text style={styles.meterLabel}>TKDL Prior Art Match</Text>
+                <Text style={styles.meterValue}>{analysisResult.priorArtScore}%</Text>
+              </View>
+              <View style={styles.track}>
+                <View
+                  style={[
+                    styles.fill,
+                    {
+                      width: `${analysisResult.priorArtScore}%`,
+                      backgroundColor:
+                        analysisResult.priorArtScore > 70 ? colors.danger : colors.success,
+                    },
+                  ]}
+                />
+              </View>
+            </View>
+
+            <View style={styles.section}>
+              <View style={styles.sectionTitleRow}>
+                <Leaf size={14} color={colors.brand} strokeWidth={2.25} />
+                <Text style={styles.sectionTitle}>Detected Medicinal Botanicals</Text>
+              </View>
+              {analysisResult.detectedHerbs?.map((herb, idx) => (
+                <View key={idx} style={styles.herbChip}>
+                  <Text style={styles.herbChipText}>{herb}</Text>
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.section}>
+              <View style={styles.sectionTitleRow}>
+                <ScrollText size={14} color={colors.brand} strokeWidth={2.25} />
+                <Text style={styles.sectionTitle}>Identified Patent Claims</Text>
+              </View>
+              {analysisResult.keyClaims?.map((claim, idx) => (
+                <Text key={idx} style={styles.claimText}>
+                  {idx + 1}. {claim}
+                </Text>
+              ))}
+            </View>
+
+            <View style={styles.extractedBox}>
+              <Text style={styles.extractedLabel}>Full Report Summary:</Text>
+              <Text style={styles.extractedText}>{analysisResult.extractedText}</Text>
+            </View>
+
+            <TouchableOpacity style={styles.chatLinkBtn} onPress={handleSendToChat}>
+              <MessageSquare size={16} color={colors.textOnBrand} strokeWidth={2.25} />
+              <Text style={styles.chatLinkBtnText}>Discuss Findings with AI Assistant</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: colors.bg,
+  },
+  header: {
+    padding: spacing.lg,
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  headerTitle: {
+    ...typography.title,
+  },
+  headerSubtitle: {
+    marginTop: spacing.xs,
+    ...typography.subtitle,
+    lineHeight: 18,
+  },
+  scrollContent: {
+    padding: spacing.lg,
+    gap: spacing.lg,
+  },
+  card: {
+    padding: spacing.lg,
+    borderRadius: radii.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  cardDescription: {
+    marginTop: spacing.xs,
+    marginBottom: spacing.md,
+    ...typography.bodySmall,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: spacing.sm + 2,
+    marginBottom: spacing.md,
+  },
+  flex1: {
+    flex: 1,
+  },
+  imageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    minHeight: 44,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 3,
+    borderRadius: radii.md,
+    backgroundColor: colors.bgSubtle,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+  },
+  imageButtonText: {
+    color: colors.textPrimary,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  filePreviewBox: {
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
+    gap: spacing.xs + 2,
+  },
+  clearBtn: {
+    alignSelf: 'flex-end',
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: spacing.xs,
+  },
+  clearBtnText: {
+    fontSize: 12,
+    color: colors.danger,
+    fontWeight: '600',
+  },
+  analyzeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    minHeight: 48,
+    borderRadius: radii.md,
+    backgroundColor: colors.brand,
+    marginTop: spacing.xs + 2,
+  },
+  analyzeButtonText: {
+    color: colors.textOnBrand,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  disabledBtn: {
+    opacity: 0.5,
+  },
+  loadingCard: {
+    padding: spacing.lg,
+    borderRadius: radii.lg,
+    backgroundColor: colors.bgSubtle,
+    alignItems: 'center',
+  },
+  resultsCard: {
+    padding: spacing.lg,
+    borderRadius: radii.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: spacing.md,
+  },
+  resultHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  resultTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  scoreBadge: {
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.sm,
+    backgroundColor: '#FBEAE9',
+  },
+  scoreBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.danger,
+  },
+  meterContainer: {
+    gap: spacing.xs + 2,
+  },
+  meterLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  meterLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  meterValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  track: {
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.neutral[200],
+    overflow: 'hidden',
+  },
+  fill: {
+    height: '100%',
+    borderRadius: 5,
+  },
+  section: {
+    gap: spacing.xs + 2,
+  },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  herbChip: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: radii.sm,
+    backgroundColor: colors.green[100],
+  },
+  herbChipText: {
+    fontSize: 13,
+    color: colors.brand,
+    fontWeight: '600',
+  },
+  claimText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 18,
+  },
+  extractedBox: {
+    padding: spacing.md,
+    borderRadius: radii.md,
+    backgroundColor: colors.bgSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  extractedLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
+  },
+  extractedText: {
+    fontSize: 12,
+    color: colors.textPrimary,
+    lineHeight: 17,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  chatLinkBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    minHeight: 46,
+    borderRadius: radii.md,
+    backgroundColor: colors.brandMuted,
+    marginTop: spacing.xs + 2,
+  },
+  chatLinkBtnText: {
+    color: colors.textOnBrand,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+});

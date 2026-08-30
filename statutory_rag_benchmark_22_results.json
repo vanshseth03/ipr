@@ -1,0 +1,1486 @@
+{
+  "target_url": "https://warm-hairs-kneel.loca.lt",
+  "timestamp": "2026-08-29 17:37:46",
+  "health_and_gpu": {
+    "status": "healthy",
+    "models": {
+      "llm": {
+        "loaded": true,
+        "name": "Gemma-2-2B-IT (float16)"
+      },
+      "embeddings": {
+        "loaded": true
+      },
+      "reranker": {
+        "loaded": true
+      },
+      "asr": {
+        "loaded": true
+      },
+      "rag_db": {
+        "loaded": true,
+        "records": 362
+      }
+    },
+    "gpu": {
+      "gpu_0": {
+        "name": "Tesla T4",
+        "allocated_gb": 5.25,
+        "total_gb": 15.6,
+        "free_gb": 10.39
+      },
+      "gpu_1": {
+        "name": "Tesla T4",
+        "allocated_gb": 3.43,
+        "total_gb": 15.6,
+        "free_gb": 12.21
+      }
+    },
+    "started_at": "2026-08-29T11:51:42.350634"
+  },
+  "statutory_rag_22_benchmarks": [
+    {
+      "id": 1,
+      "category": "Traditional Knowledge Bar (Patents Act §3(p))",
+      "query": "Can a company patent a standardized extract of Ashwagandha (Withania somnifera) that is documented in classical texts like Charaka Samhita for stress and vitality?",
+      "expected_citation": "Section 3(p)",
+      "latency_s": 53.71,
+      "answer_length_chars": 2763,
+      "citation_matched": true,
+      "citations_extracted": [],
+      "sources_used": 7,
+      "top_source_title": "First Schedule - Authoritative Books of Ayurvedic, Siddha and Unani Systems",
+      "top_source_score": 0.032404858618974686,
+      "has_disclaimer": true,
+      "answer_full": "This question involves several aspects of intellectual property law, particularly relating to traditional knowledge and pharmaceutical patents.  Here's a breakdown of the issues and potential challenges:\n\n**Potential Challenges:**\n\n* **Traditional Knowledge Bar (Section 3(p)):** Under Section 3(p) of the Patents Act, 1970, patents cannot be granted for inventions derived from traditional knowledge, including those found in ancient texts like the Charaka Samhita. This bar applies even if the invention is a standardized extract of Ashwagandha.\n* **Known Substance/Efficacy Enhancement Bar (Section 3(d)):**  If the standardized extract is simply a known substance with well-documented uses, it might fall under Section 3(d) of the Patents Act, which prohibits patents for mere additions or enhancements of existing substances. \n* **Mere Admixture Bar (Section 3(e)):**  The extract could also be considered a mere admixture of Ashwagandha with other components, potentially violating Section 3(e).\n* **Agricultural Method Bar (Section 3(h)):** While extracts can be patented, methods of cultivation or harvesting of plants are generally excluded from patenting under Section 3(h). However, if the extraction process is unique and significantly improves yield or quality, it might be eligible for patent protection.\n\n**Considerations:**\n\n* **Scientific Evidence:** The company would need to demonstrate that its standardized extract possesses novel properties beyond what is already known about Ashwagandha. Scientific studies demonstrating the extract's unique efficacy for stress and vitality would strengthen the case.\n* **Prior Art Search:** A thorough search of prior art (existing patents and publications) is crucial to ensure that the proposed invention is truly novel and doesn't infringe upon existing claims.\n* **Novelty and Utility:** Even if the extract meets the above criteria, it must still demonstrate novelty and utility. It needs to provide a significant improvement over existing treatments for stress and vitality.\n* **Pharmaceutical Formulation:** The company should consider whether the extract is formulated into a new dosage form or delivery system that provides additional benefits.\n\n**Conclusion:**\n\nWhile the company could attempt to patent the standardized extract of Ashwagandha, success hinges on overcoming the hurdles posed by traditional knowledge laws and demonstrating novelty and utility. Consulting with a qualified patent attorney specializing in pharmaceuticals and traditional knowledge is essential to assess the viability of the patent application. \n\n\n\n**Disclaimer: This information is for educational purposes only and does not constitute legal advice. Consult with a registered IP attorney for specific guidance.**",
+      "sources": [
+        {
+          "doc_id": "IND-DC-1940-FIRST-SCHEDULE",
+          "title": "First Schedule - Authoritative Books of Ayurvedic, Siddha and Unani Systems",
+          "citation": "[First Schedule, Drugs and Cosmetics Act, 1940]",
+          "score": 0.032404858618974686
+        },
+        {
+          "doc_id": "IND-PAT-1970-S083",
+          "title": "Section 83 - General principles applicable to working of patented inventions",
+          "citation": "[Section 83, Patents Act, 1970]",
+          "score": 0.01799231953918934
+        },
+        {
+          "doc_id": "IND-PAT-1970-S129",
+          "title": "Section 129 - Restrictions on practice as patent agents",
+          "citation": "[Section 129, Patents Act, 1970]",
+          "score": 0.010793269611895084
+        },
+        {
+          "doc_id": "IND-DC-1945-R161",
+          "title": "Rule 161 - 2[Labelling, packing and limit of alcohol.]—(1) There shall be conspicuously",
+          "citation": "[Rule 161, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.008888712152838707
+        },
+        {
+          "doc_id": "IND-DC-1945-R157",
+          "title": "Rule 157 - Conditions for the grant or renewal of a licence in Form 25-D.—Before a licence",
+          "citation": "[Rule 157, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.007755745202302933
+        },
+        {
+          "doc_id": "IND-DC-1940-S33EEC",
+          "title": "Section 33EEC - Prohibition of manufacture and sale of certain Ayurvedic, Siddha and Unani drug",
+          "citation": "[Section 33EEC, Drugs and Cosmetics Act, 1940]",
+          "score": 0.007234715856611729
+        },
+        {
+          "doc_id": "IND-PAT-1970-S002",
+          "title": "Section 2 - Definitions and interpretation",
+          "citation": "[Section 2, Patents Act, 1970]",
+          "score": 0.006493174005299807
+        }
+      ],
+      "metadata": {
+        "model": "Gemma-2-2B-IT (float16)",
+        "engine": "gemma-2b-fp16",
+        "search_time_ms": 2385,
+        "generation_time_ms": 39412,
+        "total_time_ms": 41798,
+        "sources_used": 7,
+        "retrieval_method": "Dense(FAISS)+Sparse(BM25)+RRF→CrossEncoder"
+      },
+      "status": "PASS"
+    },
+    {
+      "id": 2,
+      "category": "Enhanced Therapeutic Efficacy (Patents Act §3(d))",
+      "query": "What standard of enhanced therapeutic efficacy must an applicant prove under Section 3(d) of the Patents Act to patent a new polymorphic form or derivative of a known Ayurvedic phytochemical?",
+      "expected_citation": "Section 3(d)",
+      "latency_s": 19.22,
+      "answer_length_chars": 199,
+      "citation_matched": false,
+      "citations_extracted": [],
+      "sources_used": 7,
+      "top_source_title": "Section 3 - What are not inventions",
+      "top_source_score": 0.34842002391815186,
+      "has_disclaimer": true,
+      "answer_full": "I do not have sufficient information to answer this. Please consult a registered IP attorney. \nDisclaimer: This is information, not legal advice. For specific cases, consult a registered IP attorney.",
+      "sources": [
+        {
+          "doc_id": "IND-PAT-1970-S003",
+          "title": "Section 3 - What are not inventions",
+          "citation": "[Section 3, Patents Act, 1970]",
+          "score": 0.34842002391815186
+        },
+        {
+          "doc_id": "IND-DC-1945-R157",
+          "title": "Rule 157 - Conditions for the grant or renewal of a licence in Form 25-D.—Before a licence",
+          "citation": "[Rule 157, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.2047763168811798
+        },
+        {
+          "doc_id": "IND-DC-1940-S33B",
+          "title": "Section 33B - Application of Chapter IVA",
+          "citation": "[Section 33B, Drugs and Cosmetics Act, 1940]",
+          "score": 0.05549221485853195
+        },
+        {
+          "doc_id": "IND-DC-1940-S33EEC",
+          "title": "Section 33EEC - Prohibition of manufacture and sale of certain Ayurvedic, Siddha and Unani drug",
+          "citation": "[Section 33EEC, Drugs and Cosmetics Act, 1940]",
+          "score": 0.03002033941447735
+        },
+        {
+          "doc_id": "IND-DC-1945-R166",
+          "title": "Rule 166 - Duties of Government Analyst– (1) The Government Analyst shall analyze or test or",
+          "citation": "[Rule 166, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.022805145010352135
+        },
+        {
+          "doc_id": "IND-DC-1945-R161",
+          "title": "Rule 161 - 2[Labelling, packing and limit of alcohol.]—(1) There shall be conspicuously",
+          "citation": "[Rule 161, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.020451366901397705
+        },
+        {
+          "doc_id": "IND-DC-1940-S33H",
+          "title": "Section 33H - Application of provisions of sections 22, 23, 24 and 25",
+          "citation": "[Section 33H, Drugs and Cosmetics Act, 1940]",
+          "score": 0.01777719147503376
+        }
+      ],
+      "metadata": {
+        "model": "Gemma-2-2B-IT (float16)",
+        "engine": "gemma-2b-fp16",
+        "search_time_ms": 2366,
+        "generation_time_ms": 5717,
+        "total_time_ms": 8083,
+        "sources_used": 7,
+        "retrieval_method": "Dense(FAISS)+Sparse(BM25)+RRF→CrossEncoder"
+      },
+      "status": "WARN"
+    },
+    {
+      "id": 3,
+      "category": "Mere Admixture Bar (Patents Act §3(e))",
+      "query": "Why does Section 3(e) of the Patents Act reject patent claims for combining ginger (Shunthi), black pepper (Maricha), and long pepper (Pippali) without showing synergistic bio-enhancement?",
+      "expected_citation": "Section 3(e)",
+      "latency_s": 32.22,
+      "answer_length_chars": 1994,
+      "citation_matched": true,
+      "citations_extracted": [],
+      "sources_used": 7,
+      "top_source_title": "Section 3 - What are not inventions",
+      "top_source_score": 0.05289790406823158,
+      "has_disclaimer": true,
+      "answer_full": "This question cannot be answered definitively based solely on the provided context.  Here's why:\n\n**Understanding Section 3(e)**\n\nSection 3(e) of the Patents Act deals with the rejection of patent claims based on mere admixture. It states that a patent will be rejected if the combination of substances doesn't demonstrate a significant enhancement of the known efficacy of those substances. \n\n**Limitations of the Context**\n\nWhile the provided context outlines various aspects of patent law, including definitions, general principles, and exceptions, it lacks specifics regarding the interpretation and application of Section 3(e). We need additional information to understand how Section 3(e) applies to the specific example of ginger, black pepper, and long pepper.\n\n**Factors to Consider:**\n\nTo determine the validity of a patent claiming a combination of these ingredients, we would need to consider:\n\n* **Scientific Evidence:** Does the patent provide scientific evidence demonstrating a synergistic effect between the three ingredients beyond simply being combined? \n* **Known Properties:** Are there existing studies or literature that show the individual properties of each ingredient and how they might interact?\n* **Efficacy Enhancement:** Is there demonstrable improvement in the effectiveness of the combined ingredients compared to using them individually?\n* **Prior Art:** Has a similar combination already been patented or commercially utilized?\n\n**Conclusion**\n\nBased on the limited context, we can't conclusively state why Section 3(e) might reject a patent claim for ginger, black pepper, and long pepper without showing synergistic bio-enhancement. A thorough legal analysis would require examining the specific details of the patent application, its supporting documentation, and relevant prior art. \n\n\n\n**Disclaimer:** This information is for informational purposes only and does not constitute legal advice. Consult with a qualified patent attorney for specific guidance.",
+      "sources": [
+        {
+          "doc_id": "IND-PAT-1970-S003",
+          "title": "Section 3 - What are not inventions",
+          "citation": "[Section 3, Patents Act, 1970]",
+          "score": 0.05289790406823158
+        },
+        {
+          "doc_id": "IND-PATRULES-2003-R002",
+          "title": "Rule 2 - Definitions",
+          "citation": "[Rule 2, Patents Rules, 2003]",
+          "score": 0.025941798463463783
+        },
+        {
+          "doc_id": "IND-PAT-1970-S083",
+          "title": "Section 83 - General principles applicable to working of patented inventions",
+          "citation": "[Section 83, Patents Act, 1970]",
+          "score": 0.018645385280251503
+        },
+        {
+          "doc_id": "IND-PAT-1970-S162",
+          "title": "Section 162 - Repeal of Act 2 of 1911 in so far as it relates to patents and savings",
+          "citation": "[Section 162, Patents Act, 1970]",
+          "score": 0.018122021108865738
+        },
+        {
+          "doc_id": "IND-PAT-1970-S006",
+          "title": "Section 6 - The proviso omitted by Act 38 of 2002, s",
+          "citation": "[Section 6, Patents Act, 1970]",
+          "score": 0.012343109585344791
+        },
+        {
+          "doc_id": "IND-PAT-1970-S033",
+          "title": "Section 33 - Anticipation by use and publication after provisional specification",
+          "citation": "[Section 33, Patents Act, 1970]",
+          "score": 0.011646850034594536
+        },
+        {
+          "doc_id": "IND-PAT-1970-S064",
+          "title": "Section 64 - Revocation of Power patents",
+          "citation": "[Section 64, Patents Act, 1970]",
+          "score": 0.010190611705183983
+        }
+      ],
+      "metadata": {
+        "model": "Gemma-2-2B-IT (float16)",
+        "engine": "gemma-2b-fp16",
+        "search_time_ms": 2442,
+        "generation_time_ms": 28059,
+        "total_time_ms": 30501,
+        "sources_used": 7,
+        "retrieval_method": "Dense(FAISS)+Sparse(BM25)+RRF→CrossEncoder"
+      },
+      "status": "PASS"
+    },
+    {
+      "id": 4,
+      "category": "Agricultural & Cultivation Exclusions (Patents Act §3(h))",
+      "query": "Is a method of cultivating endangered Himalayan Ayurvedic herbs such as Kutki (Picrorhiza kurroa) using a specialized hydroponic technique patentable in India under Section 3(h)?",
+      "expected_citation": "Section 3(h)",
+      "latency_s": 45.55,
+      "answer_length_chars": 2282,
+      "citation_matched": true,
+      "citations_extracted": [],
+      "sources_used": 7,
+      "top_source_title": "Rule 157 - Conditions for the grant or renewal of a licence in Form 25-D.—Before a licence",
+      "top_source_score": 0.09749681502580643,
+      "has_disclaimer": true,
+      "answer_full": "This question requires careful consideration of Section 3(h) of the Patents Act, 1970.  Here's why and what I can tell you:\n\n**Understanding Section 3(h)**\n\nSection 3(h) specifically addresses the patentability of methods for medical treatments. It states:\n\n> *“Medical treatment”* means any method of treating disease or ailment, whether by way of surgery, medication, therapy, or any other means.\n\n**Analyzing the Question**\n\n* **Method vs. Product:** A hydroponic cultivation method would likely fall under the category of a \"process\" rather than a \"product\".  \n* **Endangered Species:** The fact that Kutki is an endangered species adds complexity. While the method itself might be novel, its application to a protected species could raise concerns about conservation.\n* **Patentability:**  It's important to note that patents are generally granted for new and useful inventions.  While a hydroponic method could potentially lead to a more efficient and sustainable way to cultivate Kutki, it needs to demonstrate novelty and utility.\n\n**Potential Challenges**\n\n* **Prior Art:** There may be existing methods for cultivating plants, even endangered ones, through various techniques.  The novelty of the hydroponic method must be established.\n* **Conservation Concerns:** The potential impact on the endangered status of Kutki needs to be carefully assessed.  There may be regulations against exploiting endangered species for commercial gain.\n\n**Conclusion**\n\nBased on the limited information provided, it's difficult to definitively determine patentability. However, here's how I would approach this:\n\n1. **Detailed Analysis:** Conduct a thorough search for prior art regarding hydroponic cultivation of Kutki or similar medicinal plants.\n2. **Novelty:** Demonstrate that the proposed method is truly unique and offers significant advantages over existing methods.\n3. **Utility:** Show that the method effectively cultivates Kutki while minimizing harm to the endangered species.\n4. **Consultation:** Consult with a qualified patent attorney specializing in Indian law to assess the specific risks and opportunities associated with seeking a patent for this method.\n\n\n\n**Disclaimer: This is information, not legal advice. For specific cases, consult a registered IP attorney.**",
+      "sources": [
+        {
+          "doc_id": "IND-DC-1945-R157",
+          "title": "Rule 157 - Conditions for the grant or renewal of a licence in Form 25-D.—Before a licence",
+          "citation": "[Rule 157, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.09749681502580643
+        },
+        {
+          "doc_id": "IND-PAT-1970-S006",
+          "title": "Section 6 - The proviso omitted by Act 38 of 2002, s",
+          "citation": "[Section 6, Patents Act, 1970]",
+          "score": 0.06278317421674728
+        },
+        {
+          "doc_id": "IND-PAT-1970-S048",
+          "title": "Section 48 - Rights of patentees",
+          "citation": "[Section 48, Patents Act, 1970]",
+          "score": 0.020415013656020164
+        },
+        {
+          "doc_id": "IND-PAT-1970-S120",
+          "title": "Section 120 - Unauthorised claim of patent rights",
+          "citation": "[Section 120, Patents Act, 1970]",
+          "score": 0.016172541305422783
+        },
+        {
+          "doc_id": "IND-PAT-1970-S157A",
+          "title": "Section 157A - Protection of security of India",
+          "citation": "[Section 157A, Patents Act, 1970]",
+          "score": 0.014114283956587315
+        },
+        {
+          "doc_id": "IND-PAT-1970-S084",
+          "title": "Section 84 - Compulsory licences",
+          "citation": "[Section 84, Patents Act, 1970]",
+          "score": 0.013866366818547249
+        },
+        {
+          "doc_id": "IND-PAT-1970-S009",
+          "title": "Section 9 - Provisional and complete specifications",
+          "citation": "[Section 9, Patents Act, 1970]",
+          "score": 0.012703651562333107
+        }
+      ],
+      "metadata": {
+        "model": "Gemma-2-2B-IT (float16)",
+        "engine": "gemma-2b-fp16",
+        "search_time_ms": 2403,
+        "generation_time_ms": 33137,
+        "total_time_ms": 35541,
+        "sources_used": 7,
+        "retrieval_method": "Dense(FAISS)+Sparse(BM25)+RRF→CrossEncoder"
+      },
+      "status": "PASS"
+    },
+    {
+      "id": 5,
+      "category": "Medicinal Treatment Exclusions (Patents Act §3(i))",
+      "query": "Can a clinic patent a specialized Panchakarma therapeutic protocol involving Shirodhara and herbal steam bath for treating neurological disorders under Section 3(i)?",
+      "expected_citation": "Section 3(i)",
+      "latency_s": 44.14,
+      "answer_length_chars": 2795,
+      "citation_matched": true,
+      "citations_extracted": [],
+      "sources_used": 7,
+      "top_source_title": "Rule 157 - Conditions for the grant or renewal of a licence in Form 25-D.—Before a licence",
+      "top_source_score": 0.061840884387493134,
+      "has_disclaimer": true,
+      "answer_full": "This question requires careful consideration of Section 3(i) of the Patents Act, 1970.  Here's why and how we can analyze it:\n\n**Understanding Section 3(i)**\n\nSection 3(i) specifically addresses the prohibition of patents for methods of treatment or prevention of diseases. It states:\n\n> *“The following are not inventions within the meaning of this Act,—(i) a substance obtained by a mere admixture resulting only in the aggregation of the properties of the components thereof or a process for producing such substance; ...”*\n\n**Analyzing the Question**\n\nLet's break down the elements of the query:\n\n1. **Panchakarma Protocol:** A standardized set of procedures used in Ayurveda for holistic healing.\n2. **Shirodhara and Herbal Steam Bath:** Specific techniques within the Panchakarma protocol.\n3. **Treating Neurological Disorders:** The claimed therapeutic benefit.\n\n**Applying Section 3(i)**\n\nBased on the wording of Section 3(i), here's how we can assess the potential patentability:\n\n* **Mere Admixture:** The combination of Shirodhara and herbal steam bath could be argued as a mere admixture. While these techniques might be combined in various ways, the core concept is likely to fall under this category.\n* **Treatment Method:** The question focuses on the therapeutic effect of the protocol.  While the protocol aims to treat neurological disorders, the very essence of Ayurveda lies in holistic approaches.  Therefore, the focus on the treatment method itself might fall under the purview of Section 3(i).\n\n**Conclusion**\n\nGiven the broad language of Section 3(i), it appears highly probable that a clinic attempting to patent a specialized Panchakarma protocol involving Shirodhara and herbal steam bath for treating neurological disorders could face challenges. The combination of techniques and the intention to treat a disease could potentially fall under the scope of prohibited treatments.\n\n**Important Considerations**\n\n* **Specific Claims:** The precise wording of the patent application will be crucial. If the protocol involves unique aspects beyond the general principles of Panchakarma, there might be a chance of patentability.\n* **Prior Art:** Examining existing literature and patents related to Panchakarma and neurological disorders is essential to determine whether the proposed protocol is novel enough to be patented.\n* **Expert Opinion:** Consulting with a qualified intellectual property attorney specializing in Ayurveda and patent law is strongly recommended. They can provide expert guidance on navigating the complexities of patent law and assessing the likelihood of success.\n\n\n\n**Disclaimer:** This information is for educational purposes only and should not be construed as legal advice. Consult with a qualified professional for specific legal guidance.",
+      "sources": [
+        {
+          "doc_id": "IND-DC-1945-R157",
+          "title": "Rule 157 - Conditions for the grant or renewal of a licence in Form 25-D.—Before a licence",
+          "citation": "[Rule 157, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.061840884387493134
+        },
+        {
+          "doc_id": "IND-PAT-1970-S003",
+          "title": "Section 3 - What are not inventions",
+          "citation": "[Section 3, Patents Act, 1970]",
+          "score": 0.02407522313296795
+        },
+        {
+          "doc_id": "IND-PAT-1970-S159",
+          "title": "Section 159 - Power of Central Government to make rules",
+          "citation": "[Section 159, Patents Act, 1970]",
+          "score": 0.01049446314573288
+        },
+        {
+          "doc_id": "IND-PAT-1970-S047",
+          "title": "Section 47 - Grant of patents to be subject to certain conditions",
+          "citation": "[Section 47, Patents Act, 1970]",
+          "score": 0.010333696380257607
+        },
+        {
+          "doc_id": "IND-PATRULES-2003-R139",
+          "title": "Rule 139 - Hearing before the Controller to be in public in certain",
+          "citation": "[Rule 139, Patents Rules, 2003]",
+          "score": 0.010055671446025372
+        },
+        {
+          "doc_id": "IND-PAT-1970-S11A",
+          "title": "Section 11A - Publication of applications",
+          "citation": "[Section 11A, Patents Act, 1970]",
+          "score": 0.009629967622458935
+        },
+        {
+          "doc_id": "IND-PAT-1970-S11B",
+          "title": "Section 11B - Request for examination",
+          "citation": "[Section 11B, Patents Act, 1970]",
+          "score": 0.006920928135514259
+        }
+      ],
+      "metadata": {
+        "model": "Gemma-2-2B-IT (float16)",
+        "engine": "gemma-2b-fp16",
+        "search_time_ms": 2510,
+        "generation_time_ms": 40721,
+        "total_time_ms": 43231,
+        "sources_used": 7,
+        "retrieval_method": "Dense(FAISS)+Sparse(BM25)+RRF→CrossEncoder"
+      },
+      "status": "PASS"
+    },
+    {
+      "id": 6,
+      "category": "Plants & Biological Processes (Patents Act §3(j))",
+      "query": "Does Section 3(j) of the Patents Act allow patenting of genetically modified Ayurvedic medicinal plants or isolated natural plant seeds in India?",
+      "expected_citation": "Section 3(j)",
+      "latency_s": 30.37,
+      "answer_length_chars": 1274,
+      "citation_matched": true,
+      "citations_extracted": [],
+      "sources_used": 7,
+      "top_source_title": "Rule 157 - Conditions for the grant or renewal of a licence in Form 25-D.—Before a licence",
+      "top_source_score": 0.3579307794570923,
+      "has_disclaimer": true,
+      "answer_full": "This question requires analyzing Section 3(j) of the Patents Act, 1970.  Here's a breakdown:\n\n**Analysis:**\n\n* **Section 3(j) of the Patents Act, 1970 states:**  \"Plants, seeds, biological processes...\" \n    * This section broadly prohibits patenting of naturally occurring plants, seeds, or methods of obtaining them. It focuses on protecting biodiversity and traditional knowledge.\n\n* **Genetically Modified Organisms (GMOs):** GMOs fall under the category of \"biological processes,\" so they would generally be excluded from patentability under Section 3(j).\n\n* **Isolated Natural Plant Seeds:** Isolated natural plant seeds could potentially be considered under Section 3(j) because they are derived from plants. However, the scope of this section is broad and its interpretation can be complex.\n\n**Conclusion:**\n\nBased on the current wording of Section 3(j), patenting of genetically modified Ayurvedic medicinal plants or isolated natural plant seeds in India is unlikely.  However, the interpretation of this section can be nuanced and depends on various factors, including the specific details of the invention and how it relates to traditional knowledge. \n\n**Disclaimer:** I do not have sufficient information to answer this. Please consult a registered IP attorney.",
+      "sources": [
+        {
+          "doc_id": "IND-DC-1945-R157",
+          "title": "Rule 157 - Conditions for the grant or renewal of a licence in Form 25-D.—Before a licence",
+          "citation": "[Rule 157, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.3579307794570923
+        },
+        {
+          "doc_id": "IND-DC-1940-S33EEC",
+          "title": "Section 33EEC - Prohibition of manufacture and sale of certain Ayurvedic, Siddha and Unani drug",
+          "citation": "[Section 33EEC, Drugs and Cosmetics Act, 1940]",
+          "score": 0.08862355351448059
+        },
+        {
+          "doc_id": "IND-PAT-1970-S048",
+          "title": "Section 48 - Rights of patentees",
+          "citation": "[Section 48, Patents Act, 1970]",
+          "score": 0.07398852705955505
+        },
+        {
+          "doc_id": "IND-PAT-1970-S039",
+          "title": "Section 39 - Residents not to apply for patents outside India without prior permission",
+          "citation": "[Section 39, Patents Act, 1970]",
+          "score": 0.06535927206277847
+        },
+        {
+          "doc_id": "IND-DC-1940-S33EED",
+          "title": "Section 33EED - Power of Central Government to prohibit manufacture,",
+          "citation": "[Section 33EED, Drugs and Cosmetics Act, 1940]",
+          "score": 0.05809890478849411
+        },
+        {
+          "doc_id": "IND-PAT-1970-S083",
+          "title": "Section 83 - General principles applicable to working of patented inventions",
+          "citation": "[Section 83, Patents Act, 1970]",
+          "score": 0.0542103536427021
+        },
+        {
+          "doc_id": "IND-DC-1945-R161",
+          "title": "Rule 161 - 2[Labelling, packing and limit of alcohol.]—(1) There shall be conspicuously",
+          "citation": "[Rule 161, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.05393294245004654
+        }
+      ],
+      "metadata": {
+        "model": "Gemma-2-2B-IT (float16)",
+        "engine": "gemma-2b-fp16",
+        "search_time_ms": 2207,
+        "generation_time_ms": 18552,
+        "total_time_ms": 20760,
+        "sources_used": 7,
+        "retrieval_method": "Dense(FAISS)+Sparse(BM25)+RRF→CrossEncoder"
+      },
+      "status": "PASS"
+    },
+    {
+      "id": 7,
+      "category": "Mandatory Biological Origin Disclosure (Patents Act §10(4))",
+      "query": "What are the mandatory requirements under Section 10(4)(d)(ii)(D) of the Patents Act regarding the disclosure of Indian biological resources and NBA approval in complete specifications?",
+      "expected_citation": "Section 10(4)",
+      "latency_s": 47.3,
+      "answer_length_chars": 980,
+      "citation_matched": true,
+      "citations_extracted": [],
+      "sources_used": 7,
+      "top_source_title": "Section 1 - The proviso ins",
+      "top_source_score": 0.6016800403594971,
+      "has_disclaimer": true,
+      "answer_full": "According to Section 10(4)(d)(ii)(D) of the Patents Act, every complete specification shall include:\n\n**(D)  be accompanied by an abstract to provide technical information on the invention:**\n\n**However, this section doesn't explicitly mention the requirement for disclosing Indian biological resources or NBA approval.** \n\n\n\nIt's important to note that while this section outlines general requirements for a complete specification, there might be additional requirements depending on the nature of the invention and the specific regulations governing the use of biological resources in India. \n\nFor accurate guidance on the disclosure of Indian biological resources and NBA approval, you should consult with a qualified legal professional specializing in intellectual property law and specifically in the area of plant varieties and traditional knowledge. They can help you navigate the complexities of these issues and ensure compliance with all applicable laws and regulations.",
+      "sources": [
+        {
+          "doc_id": "IND-PAT-1970-S001",
+          "title": "Section 1 - The proviso ins",
+          "citation": "[Section 1, Patents Act, 1970]",
+          "score": 0.6016800403594971
+        },
+        {
+          "doc_id": "IND-PAT-1970-S010",
+          "title": "Section 10 - Contents of specifications",
+          "citation": "[Section 10, Patents Act, 1970]",
+          "score": 0.16745668649673462
+        },
+        {
+          "doc_id": "IND-PAT-1970-S006",
+          "title": "Section 6 - The proviso omitted by Act 38 of 2002, s",
+          "citation": "[Section 6, Patents Act, 1970]",
+          "score": 0.09827124327421188
+        },
+        {
+          "doc_id": "IND-PAT-1970-S009",
+          "title": "Section 9 - Provisional and complete specifications",
+          "citation": "[Section 9, Patents Act, 1970]",
+          "score": 0.059548839926719666
+        },
+        {
+          "doc_id": "IND-PAT-1970-S013",
+          "title": "Section 13 - Search for anticipation by previous publication and by prior claim",
+          "citation": "[Section 13, Patents Act, 1970]",
+          "score": 0.04789126664400101
+        },
+        {
+          "doc_id": "IND-PAT-1970-S011",
+          "title": "Section 11 - Priority dates of claims of a complete specification",
+          "citation": "[Section 11, Patents Act, 1970]",
+          "score": 0.040057022124528885
+        },
+        {
+          "doc_id": "IND-PAT-1970-S064",
+          "title": "Section 64 - Revocation of Power patents",
+          "citation": "[Section 64, Patents Act, 1970]",
+          "score": 0.03006015159189701
+        }
+      ],
+      "metadata": {
+        "model": "Gemma-2-2B-IT (float16)",
+        "engine": "gemma-2b-fp16",
+        "search_time_ms": 2538,
+        "generation_time_ms": 14772,
+        "total_time_ms": 17310,
+        "sources_used": 7,
+        "retrieval_method": "Dense(FAISS)+Sparse(BM25)+RRF→CrossEncoder"
+      },
+      "status": "PASS"
+    },
+    {
+      "id": 8,
+      "category": "Pre-Grant & Post-Grant Opposition on Bio-Resources (Patents Act §25)",
+      "query": "On what grounds can a pre-grant opposition under Section 25(1)(k) or post-grant opposition under Section 25(2)(k) be filed regarding non-disclosure of geographical origin of Ayurvedic raw materials?",
+      "expected_citation": "Section 25",
+      "latency_s": 41.66,
+      "answer_length_chars": 2295,
+      "citation_matched": true,
+      "citations_extracted": [],
+      "sources_used": 7,
+      "top_source_title": "Section 25 - Opposition to the patent",
+      "top_source_score": 0.17290835082530975,
+      "has_disclaimer": true,
+      "answer_full": "Based on the provided context, here's how you could argue a pre-grant or post-grant opposition concerning non-disclosure of geographical origin of Ayurvedic raw materials:\n\n**Pre-Grant Opposition:**\n\n* **Grounds:** You could argue that the applicant failed to disclose the geographical origin of the Ayurvedic raw materials in the specification, violating Section 3(j) of the Patents Act, 1970. This section specifically addresses plants, seeds, biological processes, etc. \n    * **Supporting Arguments:**\n        * The absence of geographical origin information makes it difficult to determine the authenticity and potential uniqueness of the Ayurvedic raw materials.\n        * Non-disclosure might indicate a lack of proper documentation or research supporting the claimed invention.\n        * This could potentially lead to a challenge of novelty and inventiveness of the claimed invention.\n\n**Post-Grant Opposition:**\n\n* **Grounds:** You could raise a post-grant opposition under Section 25(2)(k) arguing that the disclosure of the invention lacks clarity and fails to meet the requirements of Section 3(j) of the Patents Act, 1970.\n    * **Supporting Arguments:**\n        * The applicant did not provide enough details about the geographical origin of the raw materials.\n        * The lack of geographic specificity hinders the ability to assess the originality and distinctiveness of the invention.\n        * This would require further investigation and clarification of the invention's scope.\n\n**Important Considerations:**\n\n* **Evidence:** You will need to gather evidence to support your arguments. This could include expert testimony, scientific reports, and documentation related to the geographical origin of the Ayurvedic raw materials.\n* **Specificity:** Be precise in your arguments. Clearly state the specific geographical origins missing from the specification and explain why they are crucial to the validity of the patent.\n* **Legal Counsel:** Consulting with a qualified IP attorney is highly recommended. They can help you navigate the complexities of Indian patent law and strengthen your opposition arguments.\n\n\n\n**Disclaimer: This information is for educational purposes only and does not constitute legal advice. Consult a registered IP attorney for specific guidance.**",
+      "sources": [
+        {
+          "doc_id": "IND-PAT-1970-S025",
+          "title": "Section 25 - Opposition to the patent",
+          "citation": "[Section 25, Patents Act, 1970]",
+          "score": 0.17290835082530975
+        },
+        {
+          "doc_id": "IND-DC-1945-R160",
+          "title": "Rule 160 - Identification  of  raw  materials.— Raw  materials  used  in  the  preparation  of",
+          "citation": "[Rule 160, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.058630939573049545
+        },
+        {
+          "doc_id": "IND-PAT-1970-S001",
+          "title": "Section 1 - The proviso ins",
+          "citation": "[Section 1, Patents Act, 1970]",
+          "score": 0.04651563987135887
+        },
+        {
+          "doc_id": "IND-PATRULES-2003-R055",
+          "title": "Rule 55 - Opposition to the patent",
+          "citation": "[Rule 55, Patents Rules, 2003]",
+          "score": 0.04393664747476578
+        },
+        {
+          "doc_id": "IND-PATRULES-2003-R056",
+          "title": "Rule 56 - Constitution of Opposition Board and its proceeding",
+          "citation": "[Rule 56, Patents Rules, 2003]",
+          "score": 0.03151470050215721
+        },
+        {
+          "doc_id": "IND-DC-1945-R157",
+          "title": "Rule 157 - Conditions for the grant or renewal of a licence in Form 25-D.—Before a licence",
+          "citation": "[Rule 157, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.02975250966846943
+        },
+        {
+          "doc_id": "IND-DC-1945-SCHT",
+          "title": "Schedule T - Good Manufacturing Practices for Ayurvedic, Siddha and Unani Medicines",
+          "citation": "[Schedule T, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.025320976972579956
+        }
+      ],
+      "metadata": {
+        "model": "Gemma-2-2B-IT (float16)",
+        "engine": "gemma-2b-fp16",
+        "search_time_ms": 2359,
+        "generation_time_ms": 32830,
+        "total_time_ms": 35189,
+        "sources_used": 7,
+        "retrieval_method": "Dense(FAISS)+Sparse(BM25)+RRF→CrossEncoder"
+      },
+      "status": "PASS"
+    },
+    {
+      "id": 10,
+      "category": "Classical vs Proprietary Medicine Classification (D&C Act §3(a) vs §3(h))",
+      "query": "What is the legal difference between a Classical Ayurvedic medicine under Section 3(a) manufactured exclusively according to First Schedule authoritative texts versus a Patent or Proprietary Medicine under Section 3(h)?",
+      "expected_citation": "Section 3(a)",
+      "latency_s": 47.97,
+      "answer_length_chars": 2626,
+      "citation_matched": true,
+      "citations_extracted": [],
+      "sources_used": 7,
+      "top_source_title": "Rule 157 - Conditions for the grant or renewal of a licence in Form 25-D.—Before a licence",
+      "top_source_score": 0.7731238603591919,
+      "has_disclaimer": true,
+      "answer_full": "Here's a breakdown of the legal differences between Classical Ayurvedic medicines and Patent/Proprietary medicines under Section 3(a) and (h) of the Drugs and Cosmetics Act, 1940, drawing upon the provided context:\n\n**Classical Ayurvedic Medicines (Section 3(a))**\n\n* **Manufactured Exclusively Based on First Schedule Authoritative Texts:**  These medicines are produced strictly adhering to the guidelines outlined in the First Schedule of the Act. These texts include works like Charaka Samhita, Sushruta Samhita, and others.\n* **Protection Under Section 3(a):**  This section specifically protects classical Ayurvedic medicines. They enjoy a presumption of authenticity and safety due to their adherence to established traditions and texts.\n* **No Patent or Proprietary Rights:**  There is no explicit mention of patents or proprietary rights associated with classical Ayurvedic medicines. Their production and dissemination remain within the framework of traditional practices.\n\n**Patent or Proprietary Medicines (Section 3(h))**\n\n* **Defined as Products Not Covered by First Schedule:**  These medicines fall outside the scope of the First Schedule, meaning they are not directly derived from traditional texts.\n* **Potential for Patenting and Proprietary Rights:**  They can potentially be patented or protected through proprietary rights. This allows manufacturers to secure exclusive rights to produce and market them.\n* **Stricter Regulations:**  The regulations surrounding these medicines are stricter because they often involve novel formulations or combinations of ingredients.\n\n**Key Differences Summarized:**\n\n| Feature        | Classical Ayurvedic Medicines (Section 3(a)) | Patent/Proprietary Medicines (Section 3(h)) |\n|-----------------|-------------------------------------------|------------------------------------------|\n| Source           | First Schedule authoritative texts          | Not explicitly defined in the First Schedule |\n| Protection       | Presumption of authenticity and safety      | Potential for patents and proprietary rights |\n| Regulation       | Less stringent                               | More stringent                          |\n\n\n**Important Considerations:**\n\n* **Legal Interpretation:** While the context provides some insight, the precise interpretation of these distinctions might vary depending on specific circumstances and court rulings.\n* **Expert Advice:** Consulting a qualified legal professional specializing in intellectual property law and Indian pharmaceutical regulations is crucial for accurate guidance.\n\n\n\nLet me know if you have any further questions!",
+      "sources": [
+        {
+          "doc_id": "IND-DC-1945-R157",
+          "title": "Rule 157 - Conditions for the grant or renewal of a licence in Form 25-D.—Before a licence",
+          "citation": "[Rule 157, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.7731238603591919
+        },
+        {
+          "doc_id": "IND-DC-1945-R161",
+          "title": "Rule 161 - 2[Labelling, packing and limit of alcohol.]—(1) There shall be conspicuously",
+          "citation": "[Rule 161, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.3088284730911255
+        },
+        {
+          "doc_id": "IND-DC-1940-S33EEC",
+          "title": "Section 33EEC - Prohibition of manufacture and sale of certain Ayurvedic, Siddha and Unani drug",
+          "citation": "[Section 33EEC, Drugs and Cosmetics Act, 1940]",
+          "score": 0.29696667194366455
+        },
+        {
+          "doc_id": "IND-DC-1940-S33H",
+          "title": "Section 33H - Application of provisions of sections 22, 23, 24 and 25",
+          "citation": "[Section 33H, Drugs and Cosmetics Act, 1940]",
+          "score": 0.07999294251203537
+        },
+        {
+          "doc_id": "IND-DC-1940-FIRST-SCHEDULE",
+          "title": "First Schedule - Authoritative Books of Ayurvedic, Siddha and Unani Systems",
+          "citation": "[First Schedule, Drugs and Cosmetics Act, 1940]",
+          "score": 0.0761774480342865
+        },
+        {
+          "doc_id": "IND-DC-1945-SCHT",
+          "title": "Schedule T - Good Manufacturing Practices for Ayurvedic, Siddha and Unani Medicines",
+          "citation": "[Schedule T, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.06197288632392883
+        },
+        {
+          "doc_id": "IND-DC-1945-R166",
+          "title": "Rule 166 - Duties of Government Analyst– (1) The Government Analyst shall analyze or test or",
+          "citation": "[Rule 166, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.05146503448486328
+        }
+      ],
+      "metadata": {
+        "model": "Gemma-2-2B-IT (float16)",
+        "engine": "gemma-2b-fp16",
+        "search_time_ms": 2659,
+        "generation_time_ms": 35503,
+        "total_time_ms": 38163,
+        "sources_used": 7,
+        "retrieval_method": "Dense(FAISS)+Sparse(BM25)+RRF→CrossEncoder"
+      },
+      "status": "PASS"
+    },
+    {
+      "id": 11,
+      "category": "First Schedule Authoritative Books Requirement (D&C Act First Schedule)",
+      "query": "Which classical treatises listed in the First Schedule of the Drugs and Cosmetics Act (such as Charaka Samhita, Sushruta Samhita, and Sharangadhara Samhita) must be cited for classical manufacturing licenses?",
+      "expected_citation": "First Schedule",
+      "latency_s": 43.49,
+      "answer_length_chars": 688,
+      "citation_matched": true,
+      "citations_extracted": [],
+      "sources_used": 7,
+      "top_source_title": "First Schedule - Authoritative Books of Ayurvedic, Siddha and Unani Systems",
+      "top_source_score": 0.6230486035346985,
+      "has_disclaimer": false,
+      "answer_full": "All the classical treatises listed in the First Schedule of the Drugs and Cosmetics Act (such as Charaka Samhita, Sushruta Samhita, and Sharangadhara Samhita) must be cited for classical manufacturing licenses.  \n\n**Explanation:**\n\n* **Rule 157:** This rule explicitly states that manufacturers of Ayurvedic, Siddha, and Unani drugs must comply with the requirements outlined in the First Schedule. \n* **First Schedule:** This document lists various authoritative books containing traditional knowledge and practices. These books are essential for determining the correct nomenclature and composition of Ayurvedic, Siddha, and Unani drugs. \n\n\n\nLet me know if you have any other questions!",
+      "sources": [
+        {
+          "doc_id": "IND-DC-1940-FIRST-SCHEDULE",
+          "title": "First Schedule - Authoritative Books of Ayurvedic, Siddha and Unani Systems",
+          "citation": "[First Schedule, Drugs and Cosmetics Act, 1940]",
+          "score": 0.6230486035346985
+        },
+        {
+          "doc_id": "IND-DC-1945-R157",
+          "title": "Rule 157 - Conditions for the grant or renewal of a licence in Form 25-D.—Before a licence",
+          "citation": "[Rule 157, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.13165980577468872
+        },
+        {
+          "doc_id": "IND-DC-1945-SCHT",
+          "title": "Schedule T - Good Manufacturing Practices for Ayurvedic, Siddha and Unani Medicines",
+          "citation": "[Schedule T, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.0936674177646637
+        },
+        {
+          "doc_id": "IND-DC-1945-R161",
+          "title": "Rule 161 - 2[Labelling, packing and limit of alcohol.]—(1) There shall be conspicuously",
+          "citation": "[Rule 161, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.0624072439968586
+        },
+        {
+          "doc_id": "IND-DC-1940-S33EEC",
+          "title": "Section 33EEC - Prohibition of manufacture and sale of certain Ayurvedic, Siddha and Unani drug",
+          "citation": "[Section 33EEC, Drugs and Cosmetics Act, 1940]",
+          "score": 0.05460214987397194
+        },
+        {
+          "doc_id": "IND-DC-1945-R166",
+          "title": "Rule 166 - Duties of Government Analyst– (1) The Government Analyst shall analyze or test or",
+          "citation": "[Rule 166, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.04174909368157387
+        },
+        {
+          "doc_id": "IND-DC-1945-R151",
+          "title": "Rule 151 - Manufacture on more than one set of premises.—If Ayurvedic (including Siddha)",
+          "citation": "[Rule 151, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.030218465253710747
+        }
+      ],
+      "metadata": {
+        "model": "Gemma-2-2B-IT (float16)",
+        "engine": "gemma-2b-fp16",
+        "search_time_ms": 2434,
+        "generation_time_ms": 12534,
+        "total_time_ms": 14968,
+        "sources_used": 7,
+        "retrieval_method": "Dense(FAISS)+Sparse(BM25)+RRF→CrossEncoder"
+      },
+      "status": "PASS"
+    },
+    {
+      "id": 12,
+      "category": "Misbranded AYUSH Drugs (D&C Act §33E)",
+      "query": "Under what statutory conditions is an Ayurvedic medicine deemed to be misbranded under Section 33E of the Drugs and Cosmetics Act regarding labelling, false claims, and fictitious therapeutic values?",
+      "expected_citation": "Section 33E",
+      "latency_s": 21.26,
+      "answer_length_chars": 562,
+      "citation_matched": true,
+      "citations_extracted": [],
+      "sources_used": 7,
+      "top_source_title": "Section 33E - Misbranded drugs",
+      "top_source_score": 0.9984275102615356,
+      "has_disclaimer": true,
+      "answer_full": "An Ayurvedic medicine is deemed to be misbranded under Section 33E of the Drugs and Cosmetics Act if it:\n\n* **Is so colored, coated, powered, or polished that damage is concealed,** or if it is made to appear of better or greater therapeutic value than it really is.\n* **Is not labeled in the prescribed manner.**\n* **Bears any statement, design, or device which makes any false claim for the drug or which is false or misleading in any particular.** \n\n\n**Disclaimer:** This is information, not legal advice. For specific cases, consult a registered IP attorney.",
+      "sources": [
+        {
+          "doc_id": "IND-DC-1940-S33E",
+          "title": "Section 33E - Misbranded drugs",
+          "citation": "[Section 33E, Drugs and Cosmetics Act, 1940]",
+          "score": 0.9984275102615356
+        },
+        {
+          "doc_id": "IND-DC-1940-S33EE",
+          "title": "Section 33EE - Adulterated drugs",
+          "citation": "[Section 33EE, Drugs and Cosmetics Act, 1940]",
+          "score": 0.874305009841919
+        },
+        {
+          "doc_id": "IND-DC-1940-S33EEA",
+          "title": "Section 33EEA - Spurious drugs",
+          "citation": "[Section 33EEA, Drugs and Cosmetics Act, 1940]",
+          "score": 0.8431515097618103
+        },
+        {
+          "doc_id": "IND-DC-1940-S33H",
+          "title": "Section 33H - Application of provisions of sections 22, 23, 24 and 25",
+          "citation": "[Section 33H, Drugs and Cosmetics Act, 1940]",
+          "score": 0.8400631546974182
+        },
+        {
+          "doc_id": "IND-DC-1940-S33EEC",
+          "title": "Section 33EEC - Prohibition of manufacture and sale of certain Ayurvedic, Siddha and Unani drug",
+          "citation": "[Section 33EEC, Drugs and Cosmetics Act, 1940]",
+          "score": 0.7256127595901489
+        },
+        {
+          "doc_id": "IND-DC-1940-S33EED",
+          "title": "Section 33EED - Power of Central Government to prohibit manufacture,",
+          "citation": "[Section 33EED, Drugs and Cosmetics Act, 1940]",
+          "score": 0.2140173316001892
+        },
+        {
+          "doc_id": "IND-DC-1945-R166",
+          "title": "Rule 166 - Duties of Government Analyst– (1) The Government Analyst shall analyze or test or",
+          "citation": "[Rule 166, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.10488207638263702
+        }
+      ],
+      "metadata": {
+        "model": "Gemma-2-2B-IT (float16)",
+        "engine": "gemma-2b-fp16",
+        "search_time_ms": 2392,
+        "generation_time_ms": 9778,
+        "total_time_ms": 12170,
+        "sources_used": 7,
+        "retrieval_method": "Dense(FAISS)+Sparse(BM25)+RRF→CrossEncoder"
+      },
+      "status": "PASS"
+    },
+    {
+      "id": 13,
+      "category": "Adulterated AYUSH Drugs (D&C Act §33EE)",
+      "query": "What constitute adulterated Ayurvedic drugs under Section 33EE when decomposed raw herbs, foreign matter, or toxic contaminants are substituted into classical Rasashastra preparations?",
+      "expected_citation": "Section 33EE",
+      "latency_s": 20.82,
+      "answer_length_chars": 1322,
+      "citation_matched": true,
+      "citations_extracted": [],
+      "sources_used": 7,
+      "top_source_title": "Section 33EE - Adulterated drugs",
+      "top_source_score": 0.9951541423797607,
+      "has_disclaimer": true,
+      "answer_full": "An Ayurvedic drug is considered adulterated under Section 33EE if it is so constituted that it is **deemed to be unfit for consumption**.  This means that the substitution of decomposed raw herbs, foreign matter, or toxic contaminants into classical Rasashastra preparations would violate this standard. \n\nHere's why:\n\n* **Decomposed Raw Herbs:** The context explicitly states that an Ayurvedic drug is deemed adulterated if it consists, in whole or in part, of any decomposed substance. This suggests that even if the decomposed herbs themselves aren't directly causing harm, their presence can make the drug unsafe.\n* **Foreign Matter:** Foreign matter could include impurities like dirt, insects, or other non-herbal substances. These would also contribute to the drug being unfit for consumption.\n* **Toxic Contaminants:** Toxic contaminants could refer to heavy metals, pesticides, or other harmful substances that might contaminate the preparation. \n\n**Important Note:** While the context provides guidance, it doesn't explicitly define what constitutes \"fit for consumption\" in the context of classical Rasashastra preparations. It emphasizes the overall safety and suitability of the drug for intended use. \n\n\nDisclaimer: This is information, not legal advice. For specific cases, consult a registered IP attorney.",
+      "sources": [
+        {
+          "doc_id": "IND-DC-1940-S33EE",
+          "title": "Section 33EE - Adulterated drugs",
+          "citation": "[Section 33EE, Drugs and Cosmetics Act, 1940]",
+          "score": 0.9951541423797607
+        },
+        {
+          "doc_id": "IND-DC-1940-S33H",
+          "title": "Section 33H - Application of provisions of sections 22, 23, 24 and 25",
+          "citation": "[Section 33H, Drugs and Cosmetics Act, 1940]",
+          "score": 0.7387705445289612
+        },
+        {
+          "doc_id": "IND-DC-1940-S33EEC",
+          "title": "Section 33EEC - Prohibition of manufacture and sale of certain Ayurvedic, Siddha and Unani drug",
+          "citation": "[Section 33EEC, Drugs and Cosmetics Act, 1940]",
+          "score": 0.7377257347106934
+        },
+        {
+          "doc_id": "IND-DC-1940-S33EEA",
+          "title": "Section 33EEA - Spurious drugs",
+          "citation": "[Section 33EEA, Drugs and Cosmetics Act, 1940]",
+          "score": 0.7031095623970032
+        },
+        {
+          "doc_id": "IND-DC-1940-S33E",
+          "title": "Section 33E - Misbranded drugs",
+          "citation": "[Section 33E, Drugs and Cosmetics Act, 1940]",
+          "score": 0.4004250168800354
+        },
+        {
+          "doc_id": "IND-DC-1940-S33EED",
+          "title": "Section 33EED - Power of Central Government to prohibit manufacture,",
+          "citation": "[Section 33EED, Drugs and Cosmetics Act, 1940]",
+          "score": 0.16947528719902039
+        },
+        {
+          "doc_id": "IND-DC-1940-S33EEB",
+          "title": "Section 33EEB - Regulation of manufacture for sale of Ayurvedic, Siddha and Unani drugs",
+          "citation": "[Section 33EEB, Drugs and Cosmetics Act, 1940]",
+          "score": 0.13742667436599731
+        }
+      ],
+      "metadata": {
+        "model": "Gemma-2-2B-IT (float16)",
+        "engine": "gemma-2b-fp16",
+        "search_time_ms": 2427,
+        "generation_time_ms": 17464,
+        "total_time_ms": 19891,
+        "sources_used": 7,
+        "retrieval_method": "Dense(FAISS)+Sparse(BM25)+RRF→CrossEncoder"
+      },
+      "status": "PASS"
+    },
+    {
+      "id": 14,
+      "category": "Spurious AYUSH Drugs (D&C Act §33EEA)",
+      "query": "What legal definition governs spurious Ayurvedic drugs under Section 33EEA when manufactured under a name belonging to another drug or imitating established brand trademarks?",
+      "expected_citation": "Section 33EEA",
+      "latency_s": 32.13,
+      "answer_length_chars": 631,
+      "citation_matched": true,
+      "citations_extracted": [],
+      "sources_used": 7,
+      "top_source_title": "Section 33EEA - Spurious drugs",
+      "top_source_score": 0.9914926886558533,
+      "has_disclaimer": true,
+      "answer_full": "Spurious Ayurvedic drugs under Section 33EEA are defined as those sold, offered, or exhibited for sale under a name belonging to another drug.  This means the drug must be falsely represented as being something else. \n\n**Here's how the law defines it:**\n\n* **Section 33EEA:**  \"spurious drugs\" are defined as those sold, offered, or exhibited for sale under a name belonging to another drug. \n\n\n**Important Note:** The context also mentions that the drug must resemble another drug in a manner likely to deceive consumers. \n\n\n\nDisclaimer: This is information, not legal advice. For specific cases, consult a registered IP attorney.",
+      "sources": [
+        {
+          "doc_id": "IND-DC-1940-S33EEA",
+          "title": "Section 33EEA - Spurious drugs",
+          "citation": "[Section 33EEA, Drugs and Cosmetics Act, 1940]",
+          "score": 0.9914926886558533
+        },
+        {
+          "doc_id": "IND-DC-1940-S33H",
+          "title": "Section 33H - Application of provisions of sections 22, 23, 24 and 25",
+          "citation": "[Section 33H, Drugs and Cosmetics Act, 1940]",
+          "score": 0.8948422074317932
+        },
+        {
+          "doc_id": "IND-DC-1940-S33EEC",
+          "title": "Section 33EEC - Prohibition of manufacture and sale of certain Ayurvedic, Siddha and Unani drug",
+          "citation": "[Section 33EEC, Drugs and Cosmetics Act, 1940]",
+          "score": 0.8605058193206787
+        },
+        {
+          "doc_id": "IND-DC-1940-S33EE",
+          "title": "Section 33EE - Adulterated drugs",
+          "citation": "[Section 33EE, Drugs and Cosmetics Act, 1940]",
+          "score": 0.7732697129249573
+        },
+        {
+          "doc_id": "IND-DC-1940-S33E",
+          "title": "Section 33E - Misbranded drugs",
+          "citation": "[Section 33E, Drugs and Cosmetics Act, 1940]",
+          "score": 0.7161949276924133
+        },
+        {
+          "doc_id": "IND-DC-1940-S33EED",
+          "title": "Section 33EED - Power of Central Government to prohibit manufacture,",
+          "citation": "[Section 33EED, Drugs and Cosmetics Act, 1940]",
+          "score": 0.6029633283615112
+        },
+        {
+          "doc_id": "IND-DC-1940-S33EEB",
+          "title": "Section 33EEB - Regulation of manufacture for sale of Ayurvedic, Siddha and Unani drugs",
+          "citation": "[Section 33EEB, Drugs and Cosmetics Act, 1940]",
+          "score": 0.41110292077064514
+        }
+      ],
+      "metadata": {
+        "model": "Gemma-2-2B-IT (float16)",
+        "engine": "gemma-2b-fp16",
+        "search_time_ms": 2321,
+        "generation_time_ms": 9677,
+        "total_time_ms": 11998,
+        "sources_used": 7,
+        "retrieval_method": "Dense(FAISS)+Sparse(BM25)+RRF→CrossEncoder"
+      },
+      "status": "PASS"
+    },
+    {
+      "id": 16,
+      "category": "Good Manufacturing Practices (GMP) Mandate (D&C Rules Schedule T)",
+      "query": "What baseline infrastructure, quality control testing, and batch manufacturing record requirements are mandated under Schedule T for Ayurvedic and Siddha pharmaceutical units?",
+      "expected_citation": "Schedule T",
+      "latency_s": 44.91,
+      "answer_length_chars": 2320,
+      "citation_matched": true,
+      "citations_extracted": [],
+      "sources_used": 7,
+      "top_source_title": "Schedule T - Good Manufacturing Practices for Ayurvedic, Siddha and Unani Medicines",
+      "top_source_score": 0.9653812646865845,
+      "has_disclaimer": true,
+      "answer_full": "Schedule T mandates the following baseline infrastructure, quality control testing, and batch manufacturing record requirements for Ayurvedic and Siddha pharmaceutical units:\n\n**Baseline Infrastructure:**\n\n* **Adequate Space:** The manufacturing facility must have enough space for receiving raw materials, processing, quality control, finished goods storage, office, and rejected goods/drugs storage.\n* **Lighting and Ventilation:** The premises need to be adequately lit and ventilated, especially considering the nature of the tests and the potential for generating heat or odors during production.\n* **Cleanliness:** The premises should be clean and free from cobwebs and insects/rodents.\n\n**Quality Control Testing:**\n\n* **Identification and Testing:** Raw materials used in the preparation of Ayurvedic and Siddha drugs must be identified and tested for their genuineness. Records of these tests are mandatory.\n* **Identity, Purity, Quality, and Strength Tests:** All samples of Ayurvedic and Siddha drugs must undergo tests for identity, purity, quality, and strength. These tests are conducted according to the methods outlined in the Ayurvedic, Siddha, and Unani pharmacopoeias.\n* **Records Maintenance:** The approved laboratory must maintain records of all tests performed on samples of Ayurvedic and Siddha drugs, including the results, protocols, and calculations. These records must be retained for at least two years for substances with an expiry date and three years for others.\n\n**Batch Manufacturing Record Requirements:**\n\n* **Detailed Documentation:** Each batch of Ayurvedic and Siddha drugs must be meticulously documented, including details like the quantity produced, the date of manufacture, the batch number, and the names of the ingredients used.\n* **Storage Conditions:** Records must document the storage conditions of the batches, including temperature, humidity, and light exposure.\n* **Inspection and Verification:** Manufacturers must keep records of inspections and verifications conducted by authorized personnel.\n\nIt's important to note that these requirements are part of the broader framework established by the Drugs and Cosmetics Act, 1940 and its associated regulations. \n\n\n\nDisclaimer: This is information, not legal advice. For specific cases, consult a registered IP attorney.",
+      "sources": [
+        {
+          "doc_id": "IND-DC-1945-SCHT",
+          "title": "Schedule T - Good Manufacturing Practices for Ayurvedic, Siddha and Unani Medicines",
+          "citation": "[Schedule T, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.9653812646865845
+        },
+        {
+          "doc_id": "IND-DC-1945-R157",
+          "title": "Rule 157 - Conditions for the grant or renewal of a licence in Form 25-D.—Before a licence",
+          "citation": "[Rule 157, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.8399225473403931
+        },
+        {
+          "doc_id": "IND-DC-1945-R160B",
+          "title": "Rule 160B - Form in which approval to be granted for carrying out tests on Ayurvedic,",
+          "citation": "[Rule 160B, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.37003859877586365
+        },
+        {
+          "doc_id": "IND-DC-1945-R160",
+          "title": "Rule 160 - Identification  of  raw  materials.— Raw  materials  used  in  the  preparation  of",
+          "citation": "[Rule 160, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.350220650434494
+        },
+        {
+          "doc_id": "IND-DC-1945-R154",
+          "title": "Rule 154 - Form of licence to manufacture Ayurvedic (including Siddha) or Unani drugs.",
+          "citation": "[Rule 154, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.3309842050075531
+        },
+        {
+          "doc_id": "IND-DC-1945-R160D",
+          "title": "Rule 160D - Conditions of approval.–An approval in Form 48 shall be subject to the following",
+          "citation": "[Rule 160D, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.32300618290901184
+        },
+        {
+          "doc_id": "IND-DC-1940-S33EEC",
+          "title": "Section 33EEC - Prohibition of manufacture and sale of certain Ayurvedic, Siddha and Unani drug",
+          "citation": "[Section 33EEC, Drugs and Cosmetics Act, 1940]",
+          "score": 0.3188428580760956
+        }
+      ],
+      "metadata": {
+        "model": "Gemma-2-2B-IT (float16)",
+        "engine": "gemma-2b-fp16",
+        "search_time_ms": 2557,
+        "generation_time_ms": 32957,
+        "total_time_ms": 35514,
+        "sources_used": 7,
+        "retrieval_method": "Dense(FAISS)+Sparse(BM25)+RRF→CrossEncoder"
+      },
+      "status": "PASS"
+    },
+    {
+      "id": 17,
+      "category": "Mandatory Labelling, True List & Alcohol Limits (D&C Rules 161 & 161A)",
+      "query": "What statutory particulars must appear on the label of an Ayurvedic medicine under Rule 161, including the true list of ingredients, reference texts, and percentage of self-generated alcohol in Asavas and Arishtas?",
+      "expected_citation": "Rule 161",
+      "latency_s": 49.79,
+      "answer_length_chars": 1380,
+      "citation_matched": true,
+      "citations_extracted": [],
+      "sources_used": 7,
+      "top_source_title": "Rule 161 - 2[Labelling, packing and limit of alcohol.]—(1) There shall be conspicuously",
+      "top_source_score": 0.9768685102462769,
+      "has_disclaimer": true,
+      "answer_full": "According to Rule 161 of the Drugs and Cosmetics Rules, 1945, the following statutory particulars must appear on the label of an Ayurvedic medicine:\n\n* **True list of all ingredients:** This includes the botanical name of plant-based ingredients, parts used, and the quantity of each ingredient.\n* **Reference texts:** Reference to the authoritative books specified in the First Schedule to the Act. These could include traditional texts like Ayurveda's Sushruta Samhita or Siddha's classics.\n* **Percentage of self-generated alcohol in Asavas and Arishtas:** While the context doesn't explicitly state the percentage requirement, it implies that this information should be included. \n\n\n**Important Notes:**\n\n* **Specific requirements for Asavas and Arishtas:** The context mentions that the label needs to display the true list of ingredients, reference texts, and percentage of self-generated alcohol for Asavas and Arishtas. However, it doesn't specify the exact percentage required. \n* **Consultation with the Board:** Rule 161 states that consultation with the Board is mandatory before making rules. It's important to note that the Board might have additional guidelines regarding labeling specifics for different types of Ayurvedic medicines. \n\n\n\n**Disclaimer:** I am an AI chatbot and cannot give legal advice. Consult a qualified legal professional for specific guidance.",
+      "sources": [
+        {
+          "doc_id": "IND-DC-1945-R161",
+          "title": "Rule 161 - 2[Labelling, packing and limit of alcohol.]—(1) There shall be conspicuously",
+          "citation": "[Rule 161, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.9768685102462769
+        },
+        {
+          "doc_id": "IND-DC-1945-R161B-SHELFLIFE",
+          "title": "Rule 161B - Shelf Life and Expiry Dates for Ayurveda, Siddha and Unani Medicines",
+          "citation": "[Rule 161B, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.44979381561279297
+        },
+        {
+          "doc_id": "IND-DC-1945-SCHE1",
+          "title": "Schedule E(1) - List of Poisonous Substances under ASU Systems",
+          "citation": "[Schedule E(1), Drugs and Cosmetics Rules, 1945]",
+          "score": 0.17674922943115234
+        },
+        {
+          "doc_id": "IND-DC-1940-S33N",
+          "title": "Section 33N - Power of Central Government to make rules",
+          "citation": "[Section 33N, Drugs and Cosmetics Act, 1940]",
+          "score": 0.13225412368774414
+        },
+        {
+          "doc_id": "IND-DC-1940-S33EEC",
+          "title": "Section 33EEC - Prohibition of manufacture and sale of certain Ayurvedic, Siddha and Unani drug",
+          "citation": "[Section 33EEC, Drugs and Cosmetics Act, 1940]",
+          "score": 0.11198949068784714
+        },
+        {
+          "doc_id": "IND-DC-1945-R160",
+          "title": "Rule 160 - Identification  of  raw  materials.— Raw  materials  used  in  the  preparation  of",
+          "citation": "[Rule 160, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.03648533299565315
+        },
+        {
+          "doc_id": "IND-DC-1945-R166",
+          "title": "Rule 166 - Duties of Government Analyst– (1) The Government Analyst shall analyze or test or",
+          "citation": "[Rule 166, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.03093959391117096
+        }
+      ],
+      "metadata": {
+        "model": "Gemma-2-2B-IT (float16)",
+        "engine": "gemma-2b-fp16",
+        "search_time_ms": 2538,
+        "generation_time_ms": 21477,
+        "total_time_ms": 24015,
+        "sources_used": 7,
+        "retrieval_method": "Dense(FAISS)+Sparse(BM25)+RRF→CrossEncoder"
+      },
+      "status": "PASS"
+    },
+    {
+      "id": 18,
+      "category": "Statutory Shelf Life & Expiry Dating (D&C Rules 161B & Schedule P1)",
+      "query": "What maximum statutory shelf-life periods are specified under Rule 161B for classical Ayurvedic formulations such as Churna (2 yrs), Vati/Gutti (3 yrs), Asava/Arishta (no limit/10 yrs), and Bhasma/Rasoushadhi (stable)?",
+      "expected_citation": "Rule 161B",
+      "latency_s": 18.73,
+      "answer_length_chars": 564,
+      "citation_matched": true,
+      "citations_extracted": [],
+      "sources_used": 7,
+      "top_source_title": "Rule 161B - Shelf Life and Expiry Dates for Ayurveda, Siddha and Unani Medicines",
+      "top_source_score": 0.9869205951690674,
+      "has_disclaimer": false,
+      "answer_full": "According to Rule 161B, the maximum statutory shelf-life periods for classical Ayurvedic formulations are as follows:\n\n* **Churna:** 2 years\n* **Gutika/Vati (Tablets without Rasa):** 3 years\n* **Kastha Aushadhi only:** 3 years\n* **Kastha Aushadhi + Rasa/Uprasa/Metallic Bhasma/Guggulu:** 5 years\n* **Asava and Arishta:** No limit (but can be up to 10 years)\n* **Bhasma and Rasoushadhi:** Stable (meaning no fixed shelf life) \n\n\nPlease note:  The document states that Asava and Arishta have no limit on shelf life, but also mentions that they can be up to 10 years.",
+      "sources": [
+        {
+          "doc_id": "IND-DC-1945-R161B-SHELFLIFE",
+          "title": "Rule 161B - Shelf Life and Expiry Dates for Ayurveda, Siddha and Unani Medicines",
+          "citation": "[Rule 161B, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.9869205951690674
+        },
+        {
+          "doc_id": "IND-DC-1945-R161",
+          "title": "Rule 161 - 2[Labelling, packing and limit of alcohol.]—(1) There shall be conspicuously",
+          "citation": "[Rule 161, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.38421431183815
+        },
+        {
+          "doc_id": "IND-DC-1945-SCHE1",
+          "title": "Schedule E(1) - List of Poisonous Substances under ASU Systems",
+          "citation": "[Schedule E(1), Drugs and Cosmetics Rules, 1945]",
+          "score": 0.2776942551136017
+        },
+        {
+          "doc_id": "IND-DC-1945-R160D",
+          "title": "Rule 160D - Conditions of approval.–An approval in Form 48 shall be subject to the following",
+          "citation": "[Rule 160D, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.1586730182170868
+        },
+        {
+          "doc_id": "IND-DC-1945-R166",
+          "title": "Rule 166 - Duties of Government Analyst– (1) The Government Analyst shall analyze or test or",
+          "citation": "[Rule 166, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.061806708574295044
+        },
+        {
+          "doc_id": "IND-DC-1940-S33N",
+          "title": "Section 33N - Power of Central Government to make rules",
+          "citation": "[Section 33N, Drugs and Cosmetics Act, 1940]",
+          "score": 0.03916298598051071
+        },
+        {
+          "doc_id": "IND-DC-1945-R157",
+          "title": "Rule 157 - Conditions for the grant or renewal of a licence in Form 25-D.—Before a licence",
+          "citation": "[Rule 157, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.03381422534584999
+        }
+      ],
+      "metadata": {
+        "model": "Gemma-2-2B-IT (float16)",
+        "engine": "gemma-2b-fp16",
+        "search_time_ms": 2612,
+        "generation_time_ms": 15194,
+        "total_time_ms": 17806,
+        "sources_used": 7,
+        "retrieval_method": "Dense(FAISS)+Sparse(BM25)+RRF→CrossEncoder"
+      },
+      "status": "PASS"
+    },
+    {
+      "id": 20,
+      "category": "Mandatory National Biodiversity Authority (NBA) Approval (BD Act §3 & §6)",
+      "query": "When must foreign commercial entities and Indian applicants obtain prior approval from the National Biodiversity Authority under Sections 3 and 6 of the Biological Diversity Act before applying for any IPR based on Indian bio-resources?",
+      "expected_citation": "Section 3",
+      "latency_s": 31.11,
+      "answer_length_chars": 1259,
+      "citation_matched": false,
+      "citations_extracted": [],
+      "sources_used": 7,
+      "top_source_title": "Section 1 - The proviso ins",
+      "top_source_score": 0.09462182968854904,
+      "has_disclaimer": true,
+      "answer_full": "This question requires interpretation of the Biological Diversity Act, 2002, and its relationship to the Patents Act, 1970.  However, I cannot provide legal advice. \n\n**Here's why:**\n\n* **The provided context focuses solely on the Patents Act and Rules.** It doesn't offer guidance on the interplay between biodiversity laws and intellectual property rights.\n* **Interpreting legislation requires expertise.** Determining the precise requirements for obtaining prior approval involves understanding the nuances of both Acts and their intended application.\n\n**To find the answer you need, I recommend consulting:**\n\n1. **Legal Professionals:** Seek advice from a qualified lawyer specializing in Intellectual Property law and Biodiversity conservation. They can analyze the relevant statutes and provide accurate guidance.\n2. **National Biodiversity Authority:** Contact the National Biodiversity Authority directly. Their website or contact information should be readily available online. \n3. **Government Resources:** Explore websites of government agencies responsible for environmental regulations and intellectual property. These resources often provide summaries of legal frameworks.\n\n\n\n**Disclaimer:** I am an AI chatbot and cannot provide legal advice.",
+      "sources": [
+        {
+          "doc_id": "IND-PAT-1970-S001",
+          "title": "Section 1 - The proviso ins",
+          "citation": "[Section 1, Patents Act, 1970]",
+          "score": 0.09462182968854904
+        },
+        {
+          "doc_id": "IND-PAT-1970-S039",
+          "title": "Section 39 - Residents not to apply for patents outside India without prior permission",
+          "citation": "[Section 39, Patents Act, 1970]",
+          "score": 0.02230641432106495
+        },
+        {
+          "doc_id": "IND-PATRULES-2003-R012",
+          "title": "Rule 12 - Statement and undertaking regarding foreign applications",
+          "citation": "[Rule 12, Patents Rules, 2003]",
+          "score": 0.01667579635977745
+        },
+        {
+          "doc_id": "IND-PAT-1970-S11A",
+          "title": "Section 11A - Publication of applications",
+          "citation": "[Section 11A, Patents Act, 1970]",
+          "score": 0.016474688425660133
+        },
+        {
+          "doc_id": "IND-PAT-1970-S008",
+          "title": "Section 8 - Information and undertaking regarding foreign applications",
+          "citation": "[Section 8, Patents Act, 1970]",
+          "score": 0.008689800277352333
+        },
+        {
+          "doc_id": "IND-PATRULES-2003-R020",
+          "title": "Rule 20 - International applications designating or designating and",
+          "citation": "[Rule 20, Patents Rules, 2003]",
+          "score": 0.007654682267457247
+        },
+        {
+          "doc_id": "IND-PAT-1970-S138",
+          "title": "Section 138 - Supplementary provisions as to convention applications",
+          "citation": "[Section 138, Patents Act, 1970]",
+          "score": 0.006570938043296337
+        }
+      ],
+      "metadata": {
+        "model": "Gemma-2-2B-IT (float16)",
+        "engine": "gemma-2b-fp16",
+        "search_time_ms": 2690,
+        "generation_time_ms": 17952,
+        "total_time_ms": 20643,
+        "sources_used": 7,
+        "retrieval_method": "Dense(FAISS)+Sparse(BM25)+RRF→CrossEncoder"
+      },
+      "status": "WARN"
+    },
+    {
+      "id": 21,
+      "category": "Benefit Sharing & SBB Compliance for Indian Entities (BD Act §7 & §21)",
+      "query": "What are the legal obligations of Indian citizens and local companies regarding prior intimation to State Biodiversity Boards (SBBs) under Section 7 and Fair and Equitable Benefit Sharing under Section 21 of the BD Act?",
+      "expected_citation": "Section 7",
+      "latency_s": 33.37,
+      "answer_length_chars": 2224,
+      "citation_matched": true,
+      "citations_extracted": [],
+      "sources_used": 7,
+      "top_source_title": "Section 7 - Form of application",
+      "top_source_score": 0.006225575227290392,
+      "has_disclaimer": true,
+      "answer_full": "This question asks about the legal obligations of Indian citizens and local companies regarding prior intimation to SBBs under Section 7 and Fair and Equitable Benefit Sharing under Section 21 of the Biological Diversity Act (BD Act).  While I can provide some general guidance based on the provided context, I cannot give definitive legal advice. You should consult a qualified legal professional for specific guidance.\n\nHere's what the context suggests:\n\n**Prior Intimation to SBBs:**\n\n* **Section 7 of the BD Act:** This section mandates that individuals and entities intending to carry out activities involving biodiversity resources must obtain prior intimation from the concerned State Biodiversity Board (SBB). This implies that you need to inform the SBB about your proposed activity and seek their approval.\n* **The Context doesn't specify the content of the prior intimation.** It simply states that you need to notify the SBB. Further details on the specifics of the notification process would require consulting the BD Act itself.\n\n**Fair and Equitable Benefit Sharing (FEBS):**\n\n* **Section 21 of the BD Act:** This section outlines the principles of FEBS, emphasizing the equitable sharing of benefits arising from the utilization of genetic resources and associated traditional knowledge. \n* **The context doesn't explicitly mention the obligation of Indian citizens and companies to fulfill FEBS.** However, it highlights the importance of ensuring fair and equitable benefit sharing. \n\n**Important Considerations:**\n\n* **Specific Requirements:** The precise procedures and requirements for prior intimation and FEBS implementation might vary depending on the nature of the activity and the specific provisions of the BD Act.\n* **Legal Expertise:** Consulting with a lawyer specializing in environmental law and intellectual property is crucial to ensure compliance with the BD Act and related regulations. They can guide you through the intricacies of the legislation and help you navigate the complexities of prior intimation and FEBS.\n\n\n\n**Disclaimer:** This information is for informational purposes only and does not constitute legal advice. Consult a registered IP attorney for specific legal guidance.",
+      "sources": [
+        {
+          "doc_id": "IND-PAT-1970-S007",
+          "title": "Section 7 - Form of application",
+          "citation": "[Section 7, Patents Act, 1970]",
+          "score": 0.006225575227290392
+        },
+        {
+          "doc_id": "IND-PAT-1970-S001",
+          "title": "Section 1 - The proviso ins",
+          "citation": "[Section 1, Patents Act, 1970]",
+          "score": 0.004364244639873505
+        },
+        {
+          "doc_id": "IND-PATRULES-2003-R002",
+          "title": "Rule 2 - Definitions",
+          "citation": "[Rule 2, Patents Rules, 2003]",
+          "score": 0.0023104106076061726
+        },
+        {
+          "doc_id": "IND-PATRULES-2003-R24C",
+          "title": "Rule 24C - Expedited examination of applications",
+          "citation": "[Rule 24C, Patents Rules, 2003]",
+          "score": 0.0018889701459556818
+        },
+        {
+          "doc_id": "IND-PATRULES-2003-R021",
+          "title": "Rule 21 - Filing of priority document",
+          "citation": "[Rule 21, Patents Rules, 2003]",
+          "score": 0.0016419164603576064
+        },
+        {
+          "doc_id": "IND-PAT-1970-S133",
+          "title": "Section 133 - Convention countries",
+          "citation": "[Section 133, Patents Act, 1970]",
+          "score": 0.001445448026061058
+        },
+        {
+          "doc_id": "IND-PAT-1970-S134",
+          "title": "Section 134 - Notification as to countries not providing for reciprocity",
+          "citation": "[Section 134, Patents Act, 1970]",
+          "score": 0.001355517073534429
+        }
+      ],
+      "metadata": {
+        "model": "Gemma-2-2B-IT (float16)",
+        "engine": "gemma-2b-fp16",
+        "search_time_ms": 2486,
+        "generation_time_ms": 29984,
+        "total_time_ms": 32470,
+        "sources_used": 7,
+        "retrieval_method": "Dense(FAISS)+Sparse(BM25)+RRF→CrossEncoder"
+      },
+      "status": "PASS"
+    },
+    {
+      "id": 22,
+      "category": "TKDL Prior Art Evidentiary Weight in Global Patent Offices (EPO, USPTO, JPO)",
+      "query": "How does the TKDL access agreement operate between CSIR/Ministry of AYUSH and international patent offices to issue third-party observations and reject biopiracy patent claims on Indian medicinal plants?",
+      "expected_citation": "TKDL",
+      "latency_s": 31.34,
+      "answer_length_chars": 211,
+      "citation_matched": false,
+      "citations_extracted": [],
+      "sources_used": 7,
+      "top_source_title": "Section 1 - The proviso ins",
+      "top_source_score": 0.014047029428184032,
+      "has_disclaimer": true,
+      "answer_full": "I do not have sufficient information to answer this question.  Please consult a registered IP attorney. \n\n\nDisclaimer: This is information, not legal advice. For specific cases, consult a registered IP attorney.",
+      "sources": [
+        {
+          "doc_id": "IND-PAT-1970-S001",
+          "title": "Section 1 - The proviso ins",
+          "citation": "[Section 1, Patents Act, 1970]",
+          "score": 0.014047029428184032
+        },
+        {
+          "doc_id": "IND-PATRULES-2003-R19A",
+          "title": "Rule 19A - Indian International Searching Authority",
+          "citation": "[Rule 19A, Patents Rules, 2003]",
+          "score": 0.008153360337018967
+        },
+        {
+          "doc_id": "IND-PATRULES-2003-R19F",
+          "title": "Rule 19F - Indian International Preliminary Examining Authority",
+          "citation": "[Rule 19F, Patents Rules, 2003]",
+          "score": 0.006051252130419016
+        },
+        {
+          "doc_id": "IND-PATRULES-2003-R020",
+          "title": "Rule 20 - International applications designating or designating and",
+          "citation": "[Rule 20, Patents Rules, 2003]",
+          "score": 0.004125311970710754
+        },
+        {
+          "doc_id": "IND-PAT-1970-S083",
+          "title": "Section 83 - General principles applicable to working of patented inventions",
+          "citation": "[Section 83, Patents Act, 1970]",
+          "score": 0.004081891383975744
+        },
+        {
+          "doc_id": "IND-DC-1945-SCHT",
+          "title": "Schedule T - Good Manufacturing Practices for Ayurvedic, Siddha and Unani Medicines",
+          "citation": "[Schedule T, Drugs and Cosmetics Rules, 1945]",
+          "score": 0.0036357706412672997
+        },
+        {
+          "doc_id": "IND-DC-1940-S33B",
+          "title": "Section 33B - Application of Chapter IVA",
+          "citation": "[Section 33B, Drugs and Cosmetics Act, 1940]",
+          "score": 0.0033383453264832497
+        }
+      ],
+      "metadata": {
+        "model": "Gemma-2-2B-IT (float16)",
+        "engine": "gemma-2b-fp16",
+        "search_time_ms": 2350,
+        "generation_time_ms": 5153,
+        "total_time_ms": 7503,
+        "sources_used": 7,
+        "retrieval_method": "Dense(FAISS)+Sparse(BM25)+RRF→CrossEncoder"
+      },
+      "status": "WARN"
+    }
+  ],
+  "classification_benchmarks": [
+    {
+      "id": "CLASS-01",
+      "name": "Classical Ayurveda Medicine (First Schedule)",
+      "ingredients": [
+        "Terminalia chebula (Haritaki)",
+        "Terminalia bellirica (Bibhitaki)",
+        "Phyllanthus emblica (Amalaki)"
+      ],
+      "dosage_form": "Churna (Powder)",
+      "latency_s": 24.96,
+      "answer_preview": "This formulation falls under the category of **Classical Medicine** as it uses ingredients listed in the First Schedule of the Drugs and Cosmetics Act, 1940. \n\nHere's why:\n\n* **Ingredients:** Terminalia chebula (Haritaki), Terminalia bellirica (Bibhitaki), and Phyllanthus emblica (Amalaki) are all m",
+      "sources_used": 7,
+      "citations": [],
+      "status": "PASS"
+    },
+    {
+      "id": "CLASS-02",
+      "name": "Patent or Proprietary Medicine (P&P)",
+      "ingredients": [
+        "Withania somnifera standardized extract 5%",
+        "Curcumin 95%",
+        "Piperine bio-enhancer"
+      ],
+      "dosage_form": "Tablet",
+      "latency_s": 60.94,
+      "answer_preview": "Let's break down the classification of this AYUSH formulation:\n\n**1. Classification:**\n\n* **Classical Medicine (First Schedule):**  No. While *Withania somnifera* (Ashwagandha) and *Curcuma longa* (Turmeric) are mentioned in the First Schedule, the combination of these ingredients with piperine does",
+      "sources_used": 7,
+      "citations": [],
+      "status": "PASS"
+    },
+    {
+      "id": "CLASS-03",
+      "name": "Schedule E(1) Poisonous Herb Formulation",
+      "ingredients": [
+        "Aconitum heterophyllum (Vatsanabha)",
+        "Strychnos nux-vomica (Vishamushti)",
+        "Gingelly oil"
+      ],
+      "dosage_form": "Taila (Medicated Oil)",
+      "latency_s": 42.58,
+      "answer_preview": "Let's break down the classification of this AYUSH formulation.\n\n**Analysis:**\n\n* **Ingredients:** Aconitum heterophyllum (Vatsanabha), Strychnos nux-vomica (Vishamushti), Gingelly oil. These are known active ingredients commonly found in Ayurvedic formulations.\n* **Dosage Form:** Taila (Medicated Oi",
+      "sources_used": 7,
+      "citations": [],
+      "status": "PASS"
+    }
+  ],
+  "streaming_benchmarks": {
+    "ttft_s": 19.449,
+    "total_latency_s": 25.09,
+    "token_count": 58,
+    "tokens_per_sec": 10.3,
+    "sources_count": 7,
+    "status": "PASS"
+  },
+  "asr_benchmarks": [
+    {
+      "id": "ASR-01",
+      "name": "Clean Legal English Speech",
+      "noise_condition": "Clean Reference (Studio)",
+      "snr_db": 999,
+      "original_text": "Can a company patent a standardized extract of Ashwagandha under Section 3p of the Indian Patents Act?",
+      "transcribed_text": "Can a company patent a standardized extract of Ashwagandha under Section 3-P of the Indian Patents Act?",
+      "latency_s": 7.812,
+      "detected_language": "en",
+      "confidence": 0.998,
+      "word_recall_pct": 100.0,
+      "status": "PASS"
+    },
+    {
+      "id": "ASR-02",
+      "name": "Moderate Noise Legal Speech (SNR 20dB)",
+      "noise_condition": "Gaussian Noise (20dB)",
+      "snr_db": 20,
+      "original_text": "What standard of therapeutic efficacy is required under Section 3d for Ayurvedic derivatives?",
+      "transcribed_text": "What standard of therapeutic efficacy is required under Section 3-D for Ayurvedic derivatives?",
+      "latency_s": 26.758,
+      "detected_language": "en",
+      "confidence": 0.998,
+      "word_recall_pct": 100.0,
+      "status": "PASS"
+    },
+    {
+      "id": "ASR-03",
+      "name": "Heavy Noise Street Acoustic Speech (SNR 10dB)",
+      "noise_condition": "Gaussian Noise (10dB)",
+      "snr_db": 10,
+      "original_text": "Combining ginger black pepper and long pepper is rejected as mere admixture under Section 3e.",
+      "transcribed_text": "Combining ginger, black pepper and long pepper is rejected as mere admixture under section 3.",
+      "latency_s": 12.82,
+      "detected_language": "en",
+      "confidence": 0.995,
+      "word_recall_pct": 92.9,
+      "status": "PASS"
+    },
+    {
+      "id": "ASR-04",
+      "name": "Extreme Noise Acoustic Speech (SNR 5dB)",
+      "noise_condition": "Gaussian Noise (5dB Stress)",
+      "snr_db": 5,
+      "original_text": "Is hydroponic cultivation of Picrorhiza kurroa patentable under Section 3h?",
+      "transcribed_text": "is hydroponic cultivation of Picarizacoro patentable under Section 3-H.",
+      "latency_s": 10.566,
+      "detected_language": "en",
+      "confidence": 0.995,
+      "word_recall_pct": 80.0,
+      "status": "PASS"
+    },
+    {
+      "id": "ASR-05",
+      "name": "Classical Botanical Nomenclature Speech",
+      "noise_condition": "Clean Classical Botanical",
+      "snr_db": 999,
+      "original_text": "Triphala churna containing Haritaki Bibhitaki and Amalaki complies with Schedule 1 authoritative texts.",
+      "transcribed_text": "Tripalachurna containing Haridaki Bibhataki and Amalaki complies with Schedule 1 authoritative texts.",
+      "latency_s": 4.089,
+      "detected_language": "en",
+      "confidence": 0.998,
+      "word_recall_pct": 69.2,
+      "status": "PASS"
+    }
+  ],
+  "summary_metrics": {
+    "total_statutory_queries": 22,
+    "statutory_queries_passed": 16,
+    "pass_rate_pct": 72.7,
+    "avg_rag_latency_s": 31.32,
+    "total_asr_tests": 5,
+    "asr_tests_passed": 5,
+    "total_classification_tests": 3,
+    "classification_tests_passed": 3
+  }
+}

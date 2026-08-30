@@ -1,0 +1,575 @@
+import React, { useState } from 'react';
+import {
+  StyleSheet,
+  Text,
+  View,
+  SafeAreaView,
+  ScrollView,
+  TextInput,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+  Platform,
+} from 'react-native';
+import { useRouter } from 'expo-router';
+
+import ClassifyWizardStep from '../../components/classify/ClassifyWizardStep';
+import IngredientRow from '../../components/classify/IngredientRow';
+
+import { useClassifyMutation } from '../../hooks/useClassifyMutation';
+import { useHistoryStore } from '../../store/historyStore';
+import { useChatStore } from '../../store/chatStore';
+import { useSettingsStore } from '../../store/settingsStore';
+
+export default function ClassifyScreen() {
+  const router = useRouter();
+  const { jurisdiction } = useSettingsStore();
+  const { addItem: addHistoryItem } = useHistoryStore();
+  const { addMessage } = useChatStore();
+  const { classify, isPending, result } = useClassifyMutation();
+
+  const [step, setStep] = useState(1);
+  const [formulationName, setFormulationName] = useState('Ashwagandha-Curcumin Bio-Matrix');
+  const [classicalReference, setClassicalReference] = useState('Charaka Samhita (Sutrasthana)');
+  const [newIngredient, setNewIngredient] = useState('');
+  const [ingredients, setIngredients] = useState([
+    { name: 'Withania somnifera (Ashwagandha extract 10:1)' },
+    { name: 'Curcuma longa (95% Curcuminoid complex)' },
+    { name: 'Piper nigrum (Bio-availability enhancer)' },
+  ]);
+  const [iprCategory, setIprCategory] = useState('Patent Novelty & Non-Obviousness');
+
+  const handleAddIngredient = () => {
+    if (!newIngredient.trim()) return;
+    setIngredients([...ingredients, { name: newIngredient.trim() }]);
+    setNewIngredient('');
+  };
+
+  const handleRemoveIngredient = (index) => {
+    setIngredients(ingredients.filter((_, i) => i !== index));
+  };
+
+  const handleRunClassification = async () => {
+    if (ingredients.length === 0) {
+      Alert.alert('No Ingredients', 'Please add at least one botanical ingredient.');
+      return;
+    }
+
+    try {
+      const payload = {
+        formulationName,
+        classicalReference,
+        ingredients,
+        iprCategory,
+        jurisdiction,
+      };
+
+      const res = await classify(payload);
+
+      // Save to history
+      addHistoryItem({
+        type: 'classify',
+        title: `${formulationName} (${res.confidence || 75}% Score)`,
+        summary: res.category || res.priorArtStatus,
+        data: res,
+      });
+    } catch (err) {
+      Alert.alert('Classification Error', err.message || 'Unable to classify formulation.');
+    }
+  };
+
+  const handleSendToChat = () => {
+    if (!result) return;
+    addMessage({
+      id: `msg-${Date.now()}`,
+      role: 'user',
+      content: `I analyzed my formulation **${result.formulationName}** under **${result.jurisdiction}** jurisdiction.\n\nResult Category: ${result.category}\nScore: ${result.confidence}%\nPrior Art: ${result.priorArtStatus}.\nHow can I enhance Section 3(p) non-obviousness?`,
+    });
+    router.push('/chat');
+  };
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Formulation Classifier</Text>
+        <Text style={styles.headerSubtitle}>
+          Evaluate herbal synergy, Section 3(p) patent eligibility, and TKDL prior art overlap
+        </Text>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* Step Indicator */}
+        <View style={styles.stepTabsRow}>
+          {[1, 2, 3].map((s) => (
+            <TouchableOpacity
+              key={s}
+              style={[styles.stepTab, step === s && styles.activeStepTab]}
+              onPress={() => setStep(s)}
+              accessibilityRole="button"
+              accessibilityLabel={`Wizard Step ${s}`}
+            >
+              <Text style={[styles.stepTabText, step === s && styles.activeStepTabText]}>
+                Step {s}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Step 1: General Info */}
+        {step === 1 && (
+          <ClassifyWizardStep
+            step={1}
+            title="Formulation & Classical Source"
+            description="Enter the name of your Ayurvedic formulation and any underlying classical text reference."
+          >
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Formulation Name</Text>
+              <TextInput
+                style={styles.input}
+                value={formulationName}
+                onChangeText={setFormulationName}
+                placeholder="e.g. Ashwagandha-Curcumin Bio-Matrix"
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Classical Text Reference (Prior Art Source)</Text>
+              <TextInput
+                style={styles.input}
+                value={classicalReference}
+                onChangeText={setClassicalReference}
+                placeholder="e.g. Charaka Samhita, Sushruta Samhita, API"
+              />
+            </View>
+
+            <TouchableOpacity style={styles.nextBtn} onPress={() => setStep(2)}>
+              <Text style={styles.nextBtnText}>Next: Ingredients ➔</Text>
+            </TouchableOpacity>
+          </ClassifyWizardStep>
+        )}
+
+        {/* Step 2: Ingredients */}
+        {step === 2 && (
+          <ClassifyWizardStep
+            step={2}
+            title="Botanical Ingredients List"
+            description="Add botanical plant species, extract types, or chemical fractions."
+          >
+            <View style={styles.addIngRow}>
+              <TextInput
+                style={[styles.input, styles.flex1]}
+                value={newIngredient}
+                onChangeText={setNewIngredient}
+                placeholder="e.g. Tinospora cordifolia extract 200mg"
+                onSubmitEditing={handleAddIngredient}
+              />
+              <TouchableOpacity style={styles.addBtn} onPress={handleAddIngredient}>
+                <Text style={styles.addBtnText}>+ Add</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.ingListContainer}>
+              <Text style={styles.ingListHeader}>Active Ingredients ({ingredients.length}):</Text>
+              {ingredients.map((ing, idx) => (
+                <View key={idx} style={styles.ingRowWrapper}>
+                  <IngredientRow ingredient={ing} />
+                  <TouchableOpacity
+                    style={styles.removeIngBtn}
+                    onPress={() => handleRemoveIngredient(idx)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Remove ingredient"
+                  >
+                    <Text style={styles.removeIngText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.stepNavRow}>
+              <TouchableOpacity style={styles.backBtn} onPress={() => setStep(1)}>
+                <Text style={styles.backBtnText}>⬅ Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.nextBtn} onPress={() => setStep(3)}>
+                <Text style={styles.nextBtnText}>Next: IPR Category ➔</Text>
+              </TouchableOpacity>
+            </View>
+          </ClassifyWizardStep>
+        )}
+
+        {/* Step 3: Objective */}
+        {step === 3 && (
+          <ClassifyWizardStep
+            step={3}
+            title="Regulatory & IPR Category"
+            description="Select your target Intellectual Property protection goal."
+          >
+            <View style={styles.categoryPicker}>
+              {[
+                'Patent Novelty & Non-Obviousness',
+                'TKDL Protection & Prior Art Clearance',
+                'Geographical Indication (GI) / Ayush Mark',
+                'Proprietary Medicine License',
+              ].map((cat) => (
+                <TouchableOpacity
+                  key={cat}
+                  style={[
+                    styles.categoryChip,
+                    iprCategory === cat && styles.selectedCategoryChip,
+                  ]}
+                  onPress={() => setIprCategory(cat)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: iprCategory === cat }}
+                >
+                  <Text
+                    style={[
+                      styles.categoryChipText,
+                      iprCategory === cat && styles.selectedCategoryChipText,
+                    ]}
+                  >
+                    {cat}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TouchableOpacity
+              style={[styles.classifyActionBtn, isPending && styles.disabledBtn]}
+              onPress={handleRunClassification}
+              disabled={isPending}
+              accessibilityRole="button"
+              accessibilityLabel="Run formulation classification"
+            >
+              {isPending ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.classifyActionBtnText}>
+                  🔬 Evaluate Classification & Synergy
+                </Text>
+              )}
+            </TouchableOpacity>
+          </ClassifyWizardStep>
+        )}
+
+        {/* Classification Report Card */}
+        {result && (
+          <View style={styles.reportCard}>
+            <View style={styles.reportHeader}>
+              <Text style={styles.reportTitle}>Classification Report</Text>
+              <View style={styles.scoreBadge}>
+                <Text style={styles.scoreBadgeText}>{result.confidence}% Eligibility</Text>
+              </View>
+            </View>
+
+            <Text style={styles.formulationTitle}>{result.formulationName}</Text>
+            <Text style={styles.categoryTag}>Category: {result.category}</Text>
+
+            <View style={styles.statusBox}>
+              <Text style={styles.statusLabel}>Prior Art Assessment:</Text>
+              <Text style={styles.statusText}>{result.priorArtStatus}</Text>
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Botanical Ingredients Analysis:</Text>
+              {result.ingredients?.map((ing, idx) => (
+                <IngredientRow
+                  key={idx}
+                  ingredient={ing.name}
+                  classification={ing.classification}
+                  confidence={ing.confidence}
+                />
+              ))}
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Strategic Recommendations:</Text>
+              {result.recommendations?.map((rec, idx) => (
+                <Text key={idx} style={styles.recText}>
+                  • {rec}
+                </Text>
+              ))}
+            </View>
+
+            <TouchableOpacity style={styles.chatLinkBtn} onPress={handleSendToChat}>
+              <Text style={styles.chatLinkBtnText}>
+                💬 Ask Assistant How to Improve Patent Score
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#091A10',
+    paddingTop: Platform.OS === 'android' ? 30 : 0,
+  },
+  header: {
+    padding: 16,
+    backgroundColor: '#112519',
+    borderBottomWidth: 1,
+    borderBottomColor: '#1F3C29',
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#EAF6EC',
+  },
+  headerSubtitle: {
+    marginTop: 4,
+    fontSize: 13,
+    color: '#9EBEA7',
+    lineHeight: 18,
+  },
+  scrollContent: {
+    padding: 16,
+    gap: 16,
+  },
+  stepTabsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  stepTab: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#162F20',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#24452F',
+  },
+  activeStepTab: {
+    backgroundColor: '#D4AF37',
+    borderColor: '#D4AF37',
+  },
+  stepTabText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#8CAE93',
+  },
+  activeStepTabText: {
+    color: '#091A10',
+  },
+  formGroup: {
+    gap: 6,
+    marginBottom: 14,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#333333',
+  },
+  input: {
+    minHeight: 46,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#CCCCCC',
+    backgroundColor: '#FAFAFA',
+    fontSize: 14,
+  },
+  flex1: {
+    flex: 1,
+  },
+  nextBtn: {
+    minHeight: 46,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    backgroundColor: '#1B4D3E',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  nextBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  addIngRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  addBtn: {
+    minHeight: 46,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: '#1C3624',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  ingListContainer: {
+    gap: 6,
+    marginBottom: 14,
+  },
+  ingListHeader: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#333333',
+    marginBottom: 4,
+  },
+  ingRowWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9F9F9',
+    borderRadius: 10,
+    paddingRight: 10,
+  },
+  removeIngBtn: {
+    padding: 8,
+  },
+  removeIngText: {
+    color: '#D9534F',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  stepNavRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  backBtn: {
+    minHeight: 46,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: '#EEEEEE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backBtnText: {
+    color: '#333333',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  categoryPicker: {
+    gap: 10,
+    marginBottom: 16,
+  },
+  categoryChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#DDDDDD',
+    backgroundColor: '#FAFAFA',
+  },
+  selectedCategoryChip: {
+    borderColor: '#1B4D3E',
+    backgroundColor: '#EAF4EC',
+  },
+  categoryChipText: {
+    fontSize: 14,
+    color: '#444444',
+    fontWeight: '600',
+  },
+  selectedCategoryChipText: {
+    color: '#1B4D3E',
+    fontWeight: '800',
+  },
+  classifyActionBtn: {
+    minHeight: 50,
+    borderRadius: 12,
+    backgroundColor: '#1B4D3E',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  classifyActionBtnText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  disabledBtn: {
+    opacity: 0.5,
+  },
+  reportCard: {
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    gap: 14,
+    elevation: 3,
+  },
+  reportHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  reportTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#112211',
+  },
+  scoreBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: '#EAF4EC',
+  },
+  scoreBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#1B4D3E',
+  },
+  formulationTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#112211',
+  },
+  categoryTag: {
+    fontSize: 13,
+    color: '#555555',
+    fontWeight: '600',
+  },
+  statusBox: {
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: '#F5F5F5',
+    borderWidth: 1,
+    borderColor: '#E2E2E2',
+  },
+  statusLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#444444',
+  },
+  statusText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#112211',
+    marginTop: 2,
+  },
+  section: {
+    gap: 6,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#112211',
+  },
+  recText: {
+    fontSize: 13,
+    color: '#333333',
+    lineHeight: 18,
+  },
+  chatLinkBtn: {
+    minHeight: 46,
+    borderRadius: 12,
+    backgroundColor: '#D4AF37',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 6,
+  },
+  chatLinkBtnText: {
+    color: '#091A10',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+});

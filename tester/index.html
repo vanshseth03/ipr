@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AYUSH-IPR GUARDIAN — RAG & Multi-Modal Testing Studio</title>
+  <meta name="description" content="Comprehensive testing suite, latency analyzer, and document explorer for AYUSH IPR RAG Server">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <!-- Markdown parser -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- Feather Icons -->
+  <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- TOP HEADER -->
+    <header class="top-header">
+      <div class="header-brand">
+        <div class="brand-badge">
+          <span class="pulse-ring"></span>
+          <span class="status-dot online" id="globalStatusDot"></span>
+        </div>
+        <div>
+          <h1 class="brand-title">AYUSH-IPR GUARDIAN</h1>
+          <p class="brand-subtitle">Dual-GPU Kaggle RAG & Multi-Modal QA Testing Studio</p>
+        </div>
+      </div>
+
+      <!-- SERVER URL CONFIG -->
+      <div class="server-config-group">
+        <div class="url-input-wrapper">
+          <i data-feather="server" class="url-icon"></i>
+          <input 
+            type="text" 
+            id="serverUrlInput" 
+            class="url-input" 
+            placeholder="https://tired-schools-sneeze.loca.lt" 
+            value="https://tired-schools-sneeze.loca.lt"
+            spellcheck="false"
+          />
+          <button id="btnCheckHealth" class="btn btn-secondary btn-sm" title="Test Connection">
+            <i data-feather="activity"></i>
+            <span>Ping</span>
+          </button>
+        </div>
+        <div class="header-toggle-badge">
+          <label class="toggle-switch" title="Send Bypass-Tunnel-Reminder Header">
+            <input type="checkbox" id="chkLocaltunnelBypass" checked>
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="toggle-label">Bypass Header</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- LIVE TELEMETRY / HARDWARE RIBBON -->
+    <div class="telemetry-bar">
+      <!-- GPU 0 -->
+      <div class="telemetry-card" id="cardGpu0">
+        <div class="card-header-flex">
+          <div class="card-label">
+            <i data-feather="cpu"></i>
+            <span>GPU 0 (LLM & ASR)</span>
+          </div>
+          <span class="vram-val" id="gpu0Allocated">5.86 / 15.6 GB</span>
+        </div>
+        <div class="vram-meter-track">
+          <div class="vram-meter-fill gpu0" id="gpu0Meter" style="width: 37.5%;"></div>
+        </div>
+        <div class="card-footer-meta">
+          <span class="meta-pill highlight" id="gpu0ModelName">Qwen2.5-7B (4-bit)</span>
+          <span class="meta-pill" id="gpu0Free">9.78 GB Free</span>
+        </div>
+      </div>
+
+      <!-- GPU 1 -->
+      <div class="telemetry-card" id="cardGpu1">
+        <div class="card-header-flex">
+          <div class="card-label">
+            <i data-feather="layers"></i>
+            <span>GPU 1 (BGE-M3 + Rerank)</span>
+          </div>
+          <span class="vram-val" id="gpu1Allocated">3.42 / 15.6 GB</span>
+        </div>
+        <div class="vram-meter-track">
+          <div class="vram-meter-fill gpu1" id="gpu1Meter" style="width: 21.9%;"></div>
+        </div>
+        <div class="card-footer-meta">
+          <span class="meta-pill highlight">BGE-M3 + Reranker v2</span>
+          <span class="meta-pill" id="gpu1Free">12.22 GB Free</span>
+        </div>
+      </div>
+
+      <!-- RAG DATABASE TELEMETRY -->
+      <div class="telemetry-card stat-card">
+        <div class="stat-number-row">
+          <div class="stat-icon-wrap emerald">
+            <i data-feather="database"></i>
+          </div>
+          <div>
+            <div class="stat-value" id="ragRecordCount">362</div>
+            <div class="stat-desc">UDO Statutory Records</div>
+          </div>
+        </div>
+        <div class="card-footer-meta">
+          <span class="meta-pill verified">Patents 1970 • Rules 2003 • D&C ASU</span>
+        </div>
+      </div>
+
+      <!-- LATENCY & UPTIME -->
+      <div class="telemetry-card stat-card">
+        <div class="stat-number-row">
+          <div class="stat-icon-wrap cyan">
+            <i data-feather="clock"></i>
+          </div>
+          <div>
+            <div class="stat-value" id="lastLatencyMetric">-- ms</div>
+            <div class="stat-desc">Last Turnaround Latency</div>
+          </div>
+        </div>
+        <div class="card-footer-meta">
+          <span class="meta-pill" id="serverUptime">Uptime: Active</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- NAVIGATION TABS -->
+    <nav class="main-tabs" role="tablist">
+      <button class="tab-btn active" data-tab="chatTab" id="tabChat">
+        <i data-feather="message-square"></i>
+        <span>RAG Chat & Prompt Testing</span>
+      </button>
+      <button class="tab-btn" data-tab="classifyTab" id="tabClassify">
+        <i data-feather="compass"></i>
+        <span>Formulation Classifier</span>
+      </button>
+      <button class="tab-btn" data-tab="voiceTab" id="tabVoice">
+        <i data-feather="mic"></i>
+        <span>Voice & ASR Audio</span>
+      </button>
+      <button class="tab-btn" data-tab="pdfTab" id="tabPdf">
+        <i data-feather="file-text"></i>
+        <span>PDF & Knowledge Viewer</span>
+      </button>
+      <button class="tab-btn" data-tab="benchmarkTab" id="tabBenchmark">
+        <i data-feather="zap"></i>
+        <span>Auto-Benchmark Suite</span>
+      </button>
+      <button class="tab-btn" data-tab="historyTab" id="tabHistory">
+        <i data-feather="list"></i>
+        <span>Query Logs (<span id="historyBadgeCount">0</span>)</span>
+      </button>
+    </nav>
+
+    <!-- MAIN VIEW CONTAINER -->
+    <main class="view-container">
+
+      <!-- ==================================================== -->
+      <!-- TAB 1: RAG CHAT & PROMPT TESTING -->
+      <!-- ==================================================== -->
+      <section class="tab-panel active" id="chatTab">
+        <div class="chat-workspace">
+          <!-- LEFT / MAIN: QUERY & CONVERSATION -->
+          <div class="chat-main-column">
+            <!-- QUICK PRESET PROMPTS -->
+            <div class="presets-section">
+              <span class="preset-title"><i data-feather="sparkles"></i> Benchmark Prompts:</span>
+              <div class="preset-chips-scroll">
+                <button class="preset-chip" data-query="Can I patent a traditional Ashwagandha formulation that is documented in Charaka Samhita under Indian patent law?">
+                  🏛️ Ashwagandha S.3(p) Patentability
+                </button>
+                <button class="preset-chip" data-query="What are the statutory requirements under Schedule T of Drugs and Cosmetics Rules for Good Manufacturing Practices in Ayurveda?">
+                  🏭 Schedule T GMP Requirements
+                </button>
+                <button class="preset-chip" data-query="What constitutes a spurious Ayurvedic drug under Section 33EEA of the Drugs and Cosmetics Act?">
+                  ⚠️ Spurious Drugs (S. 33EEA)
+                </button>
+                <button class="preset-chip" data-query="What is the mandatory shelf life and expiry period for Ayurvedic Churna preparations under Rule 161B?">
+                  ⏳ Rule 161B Churna Shelf Life
+                </button>
+                <button class="preset-chip" data-query="List the authoritative books recognized for the Ayurvedic system in the First Schedule of the Drugs and Cosmetics Act.">
+                  📚 First Schedule Authoritative Texts
+                </button>
+                <button class="preset-chip" data-query="What is the deadline for filing a Request for Examination (RFE) under the amended Patent Rules 2024?">
+                  ⏰ Patent Rules 2024 31-Month RFE
+                </button>
+              </div>
+            </div>
+
+            <!-- CHAT / RESPONSE STREAM BOX -->
+            <div class="response-stream-wrapper" id="responseStreamArea">
+              <div class="welcome-card" id="chatWelcomeCard">
+                <div class="welcome-icon-box">
+                  <i data-feather="shield"></i>
+                </div>
+                <h3>AYUSH-IPR AI Verification Playground</h3>
+                <p>Send legal and statutory queries regarding the Patents Act 1970, Patents Rules 2003, and Drugs & Cosmetics Act ASU provisions to test the real-time RAG pipeline on your live Kaggle dual-GPU server.</p>
+                <div class="feature-bullets">
+                  <span><i data-feather="check"></i> 362 Cleaned UDO Statutes</span>
+                  <span><i data-feather="check"></i> FAISS Vector Search + BGE-M3</span>
+                  <span><i data-feather="check"></i> BGE-Reranker Cross-Encoder</span>
+                  <span><i data-feather="check"></i> Quantized Qwen2.5 Reasoning</span>
+                </div>
+              </div>
+
+              <!-- DYNAMIC CHAT MESSAGES -->
+              <div class="chat-thread" id="chatThread" style="display: none;"></div>
+            </div>
+
+            <!-- INPUT BAR & CONTROLS -->
+            <div class="chat-input-container">
+              <!-- PARAMETERS DRAWER -->
+              <div class="input-params-bar">
+                <div class="param-item">
+                  <label for="sliderTopK">Top-K Docs: <strong id="valTopK">5</strong></label>
+                  <input type="range" id="sliderTopK" min="1" max="15" value="5">
+                </div>
+                <div class="param-item">
+                  <label><input type="checkbox" id="chkAutoScroll" checked> Auto-Scroll</label>
+                </div>
+                <div class="param-item">
+                  <label><input type="checkbox" id="chkAudioSpeak"> TTS Audio (Simulated)</label>
+                </div>
+                <button class="btn btn-ghost btn-sm" id="btnClearThread" title="Clear Conversation">
+                  <i data-feather="trash-2"></i> Clear Chat
+                </button>
+              </div>
+
+              <!-- TEXTAREA & SEND -->
+              <div class="input-box-wrapper">
+                <textarea 
+                  id="promptInput" 
+                  class="prompt-textarea" 
+                  rows="2" 
+                  placeholder="Ask any question about Indian Patent Law, AYUSH rules, Section 3 exclusions, Schedule T GMP..."
+                ></textarea>
+                <div class="input-actions">
+                  <button class="btn btn-icon" id="btnMicInput" title="Voice Input via Microphone">
+                    <i data-feather="mic"></i>
+                  </button>
+                  <button class="btn btn-primary" id="btnSendPrompt">
+                    <i data-feather="send"></i>
+                    <span>Send Prompt</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- RIGHT COLUMN: LATENCY METRICS & CITATION INSPECTOR -->
+          <div class="chat-sidebar-column">
+            <!-- LATENCY BREAKDOWN CARD -->
+            <div class="panel-card">
+              <div class="panel-card-header">
+                <i data-feather="zap"></i>
+                <h3>Timing & Latency Breakdown</h3>
+              </div>
+              <div class="latency-metrics-grid">
+                <div class="latency-tile total">
+                  <span class="tile-label">Total Latency</span>
+                  <span class="tile-value" id="metricTotalTime">0.00 s</span>
+                </div>
+                <div class="latency-tile">
+                  <span class="tile-label">RAG Retrieval</span>
+                  <span class="tile-value" id="metricSearchTime">-- ms</span>
+                </div>
+                <div class="latency-tile">
+                  <span class="tile-label">LLM Generation</span>
+                  <span class="tile-value" id="metricGenTime">-- ms</span>
+                </div>
+                <div class="latency-tile">
+                  <span class="tile-label">Active Model</span>
+                  <span class="tile-value text-sm" id="metricModelName">Qwen2.5-7B</span>
+                </div>
+              </div>
+
+              <div class="latency-bar-container">
+                <div class="latency-split-bar">
+                  <div class="split-fill retrieval" id="barRetrieval" style="width: 10%;" title="Retrieval"></div>
+                  <div class="split-fill generation" id="barGeneration" style="width: 90%;" title="Generation"></div>
+                </div>
+                <div class="split-legend">
+                  <span><span class="legend-dot retrieval"></span> Search / Rerank</span>
+                  <span><span class="legend-dot generation"></span> LLM Generation</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- RETRIEVED STATUTORY SOURCES -->
+            <div class="panel-card flex-grow">
+              <div class="panel-card-header">
+                <i data-feather="book-open"></i>
+                <h3>Retrieved Documents (<span id="sourcesCount">0</span>)</h3>
+              </div>
+              <div class="sources-list" id="retrievedSourcesList">
+                <div class="empty-sources-msg">
+                  <i data-feather="file-minus"></i>
+                  <p>Retrieved statutory citations and relevance scores will appear here after sending a prompt.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================================================== -->
+      <!-- TAB 2: FORMULATION CLASSIFIER STUDIO -->
+      <!-- ==================================================== -->
+      <section class="tab-panel" id="classifyTab">
+        <div class="classify-workspace">
+          <div class="panel-card classify-form-card">
+            <div class="panel-card-header">
+              <i data-feather="shield"></i>
+              <h3>Ayurvedic Formulation Legal Classifier</h3>
+            </div>
+            <p class="section-intro">
+              Enter the herbal ingredients and dosage form to automatically determine whether your product qualifies as a <strong>Classical Ayurvedic Medicine</strong> (First Schedule), <strong>Ayurvedic Proprietary Medicine</strong> (Section 3(h)), or potential <strong>Patent Medicine</strong> under Section 3(d)/3(p).
+            </p>
+
+            <!-- PRESET FORMULATIONS -->
+            <div class="classify-presets">
+              <span class="preset-title">Preset Formulations:</span>
+              <button class="preset-chip" id="presetChyawanprash">🍯 Classical: Chyawanprash</button>
+              <button class="preset-chip" id="presetAshwagandhaSyrup">🧪 Proprietary: Ashwagandha+Brahmi Syrup</button>
+              <button class="preset-chip" id="presetCurcuminExtract">🔬 Novel Formulation: Nano-Curcumin Complex</button>
+            </div>
+
+            <div class="form-group">
+              <label for="ingredientInput">Botanical & Herbal Ingredients (Type and hit Enter or Add):</label>
+              <div class="tag-input-box" id="tagInputBox">
+                <div class="tags-container" id="tagsContainer"></div>
+                <input type="text" id="ingredientInput" placeholder="e.g., Withania somnifera (Ashwagandha)...">
+                <button class="btn btn-secondary btn-sm" id="btnAddIngredient">Add</button>
+              </div>
+            </div>
+
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label for="selectDosageForm">Dosage Form:</label>
+                <select id="selectDosageForm" class="form-select">
+                  <option value="Syrup / Liquid Oral">Syrup / Liquid Oral</option>
+                  <option value="Vati / Gutika (Tablet)">Vati / Gutika (Tablet)</option>
+                  <option value="Churna (Powder)">Churna (Powder)</option>
+                  <option value="Taila / Ghrita (Medicated Oil/Ghee)">Taila / Ghrita (Medicated Oil/Ghee)</option>
+                  <option value="Asava / Arishta (Fermented Liquid)">Asava / Arishta (Fermented Liquid)</option>
+                  <option value="Bhasma / Rasayana (Calcined Mineral/Herbal)">Bhasma / Rasayana (Calcined Mineral/Herbal)</option>
+                  <option value="Capsule / Novel Delivery">Capsule / Novel Delivery</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="referenceText">Classical Reference Book (Optional):</label>
+                <input type="text" id="referenceText" class="form-input" placeholder="e.g., Charaka Samhita, Sharangadhara Samhita...">
+              </div>
+            </div>
+
+            <button class="btn btn-primary btn-lg" id="btnRunClassify">
+              <i data-feather="check-circle"></i>
+              <span>Classify Formulation & Determine Regulatory Pathway</span>
+            </button>
+          </div>
+
+          <!-- CLASSIFICATION RESULT CARD -->
+          <div class="panel-card classify-result-card" id="classifyResultCard">
+            <div class="panel-card-header">
+              <i data-feather="award"></i>
+              <h3>Classification & Regulatory Guidance</h3>
+              <span class="badge" id="classifyStatusBadge">Awaiting Input</span>
+            </div>
+            <div class="classify-output-content markdown-body" id="classifyOutputBody">
+              <div class="placeholder-box">
+                <i data-feather="compass"></i>
+                <p>Configure ingredients and dosage form on the left, then click <strong>Classify Formulation</strong> to run the automated regulatory analysis.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================================================== -->
+      <!-- TAB 3: VOICE & ASR AUDIO STUDIO -->
+      <!-- ==================================================== -->
+      <section class="tab-panel" id="voiceTab">
+        <div class="voice-workspace">
+          <!-- RECORDING & UPLOAD CARD -->
+          <div class="panel-card">
+            <div class="panel-card-header">
+              <i data-feather="mic"></i>
+              <h3>Whisper ASR Speech-to-Text Studio</h3>
+            </div>
+            <p class="section-intro">
+              Test multilingual speech recognition powered by <code>faster-whisper-small</code> running on Kaggle GPU 0. Supports English, Hindi, and Indian botanical vernacular queries.
+            </p>
+
+            <div class="audio-control-center">
+              <div class="mic-visualizer-box">
+                <div class="record-ring" id="recordPulseRing"></div>
+                <button class="record-main-btn" id="btnToggleRecord">
+                  <i data-feather="mic" id="recordMicIcon"></i>
+                </button>
+                <span class="record-timer" id="recordTimer">00:00</span>
+                <span class="record-status-label" id="recordStatusLabel">Click to Start Recording</span>
+              </div>
+
+              <div class="audio-divider"><span>OR UPLOAD AUDIO FILE</span></div>
+
+              <div class="file-drop-zone" id="audioDropZone">
+                <i data-feather="upload-cloud"></i>
+                <p>Drag & drop audio file here (.wav, .mp3, .m4a, .webm) or <label for="audioFileInput" class="browse-link">browse</label></p>
+                <input type="file" id="audioFileInput" accept="audio/*" style="display: none;">
+                <span class="file-chosen-name" id="chosenAudioName"></span>
+              </div>
+
+              <div class="voice-config-row">
+                <label for="asrLangSelect">Audio Language:</label>
+                <select id="asrLangSelect" class="form-select form-select-sm">
+                  <option value="">Auto-Detect</option>
+                  <option value="en">English (en)</option>
+                  <option value="hi">Hindi (hi)</option>
+                  <option value="sa">Sanskrit (sa)</option>
+                </select>
+                <button class="btn btn-secondary" id="btnTranscribeUpload" disabled>
+                  <i data-feather="play"></i> Transcribe Audio
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- TRANSCRIPTION RESULT & PIPELINE ROUTE -->
+          <div class="panel-card">
+            <div class="panel-card-header">
+              <i data-feather="file-text"></i>
+              <h3>Transcription Output</h3>
+            </div>
+            <div class="transcription-metrics" id="asrMetricsRow" style="display: none;">
+              <span class="meta-pill highlight">Language: <strong id="asrDetectedLang">--</strong></span>
+              <span class="meta-pill">Confidence: <strong id="asrProb">--</strong></span>
+              <span class="meta-pill">Duration: <strong id="asrDuration">--</strong></span>
+            </div>
+            <textarea id="transcriptionText" class="form-textarea" rows="6" placeholder="Transcribed text will appear here..."></textarea>
+            <div class="transcribe-actions">
+              <button class="btn btn-secondary" id="btnCopyTranscription">
+                <i data-feather="copy"></i> Copy Text
+              </button>
+              <button class="btn btn-primary" id="btnSendAsrToChat">
+                <i data-feather="arrow-right-circle"></i> Send to RAG Chat Query
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================================================== -->
+      <!-- TAB 4: PDF & STATUTORY DOCUMENT VIEWER -->
+      <!-- ==================================================== -->
+      <section class="tab-panel" id="pdfTab">
+        <div class="pdf-workspace">
+          <!-- SIDEBAR: DOCUMENT SELECTOR -->
+          <div class="pdf-sidebar">
+            <div class="sidebar-header">
+              <i data-feather="folder"></i>
+              <span>Project Documents & PDFs</span>
+            </div>
+            <div class="doc-links-list">
+              <button class="doc-link-btn active" data-doc="docs/ayurveda_ipr_assistant_proposal_2026.pdf" data-title="IPR Assistant Architectural Proposal">
+                <i data-feather="file"></i>
+                <div class="doc-info">
+                  <span class="doc-name">Proposal 2026</span>
+                  <span class="doc-type">System Architecture & Pipeline</span>
+                </div>
+              </button>
+
+              <button class="doc-link-btn" data-doc="docs/ayurveda_ipr_data_specification_2026.pdf" data-title="UDO Data Specification & Schema">
+                <i data-feather="file"></i>
+                <div class="doc-info">
+                  <span class="doc-name">Data Specification</span>
+                  <span class="doc-type">Unified Data Object (UDO) Schema</span>
+                </div>
+              </button>
+
+              <button class="doc-link-btn" data-doc="docs/ayurveda_ipr_scraping_playbook_2026.pdf" data-title="Ayurveda IPR Scraping & Ingestion Playbook">
+                <i data-feather="file"></i>
+                <div class="doc-info">
+                  <span class="doc-name">Scraping Playbook</span>
+                  <span class="doc-type">Statutory & Corpus Ingestion</span>
+                </div>
+              </button>
+
+              <button class="doc-link-btn" data-doc="docs/ayurveda_ipr_app_interface_spec_2026.pdf" data-title="Application Interface & UI/UX Specification">
+                <i data-feather="file"></i>
+                <div class="doc-info">
+                  <span class="doc-name">App Interface Spec</span>
+                  <span class="doc-type">React Native UI & Voice State Machine</span>
+                </div>
+              </button>
+
+              <button class="doc-link-btn" data-doc="docs/ayurveda_ipr_sih_ppt_content_2026.pdf" data-title="SIH Presentation Slide Deck Content">
+                <i data-feather="file"></i>
+                <div class="doc-info">
+                  <span class="doc-name">SIH PPT Content</span>
+                  <span class="doc-type">Presentation Deck Structure</span>
+                </div>
+              </button>
+
+              <button class="doc-link-btn" data-doc="rag-db" data-title="Master RAG JSON Database Explorer">
+                <i data-feather="database"></i>
+                <div class="doc-info">
+                  <span class="doc-name">RAG Database Explorer</span>
+                  <span class="doc-type">Search 362 Statutory Records Live</span>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <!-- MAIN VIEWER AREA -->
+          <div class="pdf-viewer-container">
+            <div class="viewer-top-bar">
+              <span class="viewer-title" id="pdfViewerTitle">IPR Assistant Architectural Proposal</span>
+              <div class="viewer-actions">
+                <a id="btnDownloadPdf" href="docs/ayurveda_ipr_assistant_proposal_2026.pdf" target="_blank" class="btn btn-secondary btn-sm" download>
+                  <i data-feather="download"></i> Download PDF
+                </a>
+                <a id="btnOpenPdfNewTab" href="docs/ayurveda_ipr_assistant_proposal_2026.pdf" target="_blank" class="btn btn-ghost btn-sm">
+                  <i data-feather="external-link"></i> New Tab
+                </a>
+              </div>
+            </div>
+
+            <!-- PDF IFRAME / EMBED -->
+            <div class="pdf-frame-wrapper" id="pdfFrameWrapper">
+              <iframe id="pdfIframe" src="docs/ayurveda_ipr_assistant_proposal_2026.pdf" frameborder="0"></iframe>
+            </div>
+
+            <!-- RAG DATABASE CLIENT-SIDE SEARCH EXPLORER -->
+            <div class="rag-db-explorer-wrapper" id="ragDbExplorerWrapper" style="display: none;">
+              <div class="db-search-bar">
+                <i data-feather="search"></i>
+                <input type="text" id="dbSearchInput" placeholder="Filter by Act, Section number (e.g. 3(p), 33EEA), Rule, or keywords...">
+                <span class="db-stats" id="dbMatchCount">Loaded 362 Records</span>
+              </div>
+              <div class="db-records-grid" id="dbRecordsGrid">
+                <!-- Dynamically rendered UDO records -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================================================== -->
+      <!-- TAB 5: AUTOMATED BENCHMARK SUITE -->
+      <!-- ==================================================== -->
+      <section class="tab-panel" id="benchmarkTab">
+        <div class="benchmark-workspace">
+          <div class="panel-card">
+            <div class="panel-card-header">
+              <div class="flex-align">
+                <i data-feather="zap"></i>
+                <h3>Automated Benchmark & Verification Suite</h3>
+              </div>
+              <button class="btn btn-primary" id="btnRunAllBenchmarks">
+                <i data-feather="play"></i> Run All 5 Canonical Benchmarks
+              </button>
+            </div>
+            <p class="section-intro">
+              Runs the standardized test suite against the live Kaggle endpoint to verify citation accuracy, statutory completeness, legal disclaimer compliance, and latency performance.
+            </p>
+
+            <div class="benchmark-summary-bar" id="benchmarkSummaryBar" style="display: none;">
+              <div class="summary-stat pass">
+                <span class="stat-big" id="benchPassedCount">0</span>
+                <span class="stat-lbl">Passed</span>
+              </div>
+              <div class="summary-stat fail">
+                <span class="stat-big" id="benchFailedCount">0</span>
+                <span class="stat-lbl">Failed</span>
+              </div>
+              <div class="summary-stat">
+                <span class="stat-big" id="benchAvgLatency">0.0s</span>
+                <span class="stat-lbl">Avg Latency</span>
+              </div>
+              <div class="summary-stat">
+                <span class="stat-big" id="benchTotalTime">0.0s</span>
+                <span class="stat-lbl">Total Time</span>
+              </div>
+            </div>
+
+            <!-- TABLE OF TESTS -->
+            <div class="table-responsive">
+              <table class="benchmark-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Query Topic</th>
+                    <th>Expected Statute</th>
+                    <th>Status</th>
+                    <th>Latency</th>
+                    <th>Citation Verified</th>
+                    <th>Disclaimer Verified</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="benchmarkTableBody">
+                  <!-- Dynamically populated rows -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================================================== -->
+      <!-- TAB 6: QUERY & AUDIT HISTORY -->
+      <!-- ==================================================== -->
+      <section class="tab-panel" id="historyTab">
+        <div class="history-workspace">
+          <div class="panel-card">
+            <div class="panel-card-header">
+              <i data-feather="list"></i>
+              <h3>Session Query Audit Log</h3>
+              <div class="flex-align">
+                <button class="btn btn-secondary btn-sm" id="btnExportHistoryJson">
+                  <i data-feather="download"></i> Export JSON
+                </button>
+                <button class="btn btn-ghost btn-sm" id="btnClearHistory">
+                  <i data-feather="trash-2"></i> Clear History
+                </button>
+              </div>
+            </div>
+
+            <div class="history-list" id="historyListContainer">
+              <div class="empty-history-state">
+                <i data-feather="inbox"></i>
+                <p>No queries executed in this session yet.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- RAW JSON MODAL -->
+  <div class="modal-overlay" id="jsonModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Raw API Response Payload</h3>
+        <button class="modal-close-btn" id="btnCloseJsonModal">&times;</button>
+      </div>
+      <pre class="modal-body json-viewer" id="jsonModalBody"></pre>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btnCopyModalJson">Copy JSON</button>
+        <button class="btn btn-primary" id="btnDoneModal">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
