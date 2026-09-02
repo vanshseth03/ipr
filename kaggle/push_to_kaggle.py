@@ -79,7 +79,8 @@ def push_dataset():
         ["kaggle", "datasets", "create", "-p", str(ds_dir), "--dir-mode", "zip"],
         capture_output=True, env=env,
     )
-    if result.returncode != 0:
+    stdout_str = result.stdout.decode('utf-8', errors='ignore') if result.stdout else ""
+    if result.returncode != 0 or "already in use" in stdout_str.lower() or "error" in stdout_str.lower():
         safe_print("  Dataset exists, updating version...")
         result = subprocess.run(
             ["kaggle", "datasets", "version", "-p", str(ds_dir),

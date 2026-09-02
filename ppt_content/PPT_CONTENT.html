@@ -1,0 +1,318 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+body { font-family: 'Segoe UI', Arial, sans-serif; margin: 40px; color: #1a1a2e; line-height: 1.6; }
+h1 { color: #0f3460; border-bottom: 3px solid #e94560; padding-bottom: 8px; }
+h2 { color: #16213e; border-bottom: 2px solid #0f3460; padding-bottom: 5px; margin-top: 30px; }
+h3 { color: #533483; }
+table { border-collapse: collapse; width: 100%; margin: 15px 0; }
+th { background: #0f3460; color: white; padding: 10px; text-align: left; }
+td { border: 1px solid #ddd; padding: 8px; }
+tr:nth-child(even) { background: #f2f2f2; }
+code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
+pre { background: #1a1a2e; color: #a5d6a7; padding: 15px; border-radius: 8px; overflow-x: auto; }
+pre code { background: transparent; color: #a5d6a7; }
+strong { color: #e94560; }
+hr { border: none; border-top: 2px solid #0f3460; margin: 25px 0; }
+blockquote { border-left: 4px solid #e94560; padding-left: 15px; color: #555; font-style: italic; }
+</style></head><body><h1>AYUSH-IPR GUARDIAN — PPT Slide Content</h1>
+<h3>Smart India Hackathon | Team of 6</h3>
+<hr />
+<h2>SLIDE 1 — Title + Problem Statement</h2>
+<p><strong>Title:</strong> AYUSH-IPR GUARDIAN<br />
+<strong>Tagline:</strong> AI-Powered Ayurveda IPR &amp; Regulatory Assistant</p>
+<p><strong>Problem:</strong>
+- Ayurveda practitioners lose IPR battles — zero legal tech support exists
+- Traditional knowledge gets patented abroad — biopiracy costs India ₹1000s Cr/year
+- No tool unifies: Formulation Classification + IPR Advisory + Voice + Legal Citations</p>
+<p><strong>Our Solution:</strong>
+- Voice-first multilingual AI (Hindi, Tamil, English)
+- Cites exact legal sections — never hallucinates
+- Cross-platform: Web + iOS + Android — one codebase
+- 100% open-source AI stack, ₹0 licensing</p>
+<p><strong>Team:</strong> 6 Members</p>
+<hr />
+<h2>SLIDE 2 — Tech Stack (ACTUAL — from codebase)</h2>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Technology</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>LLM</strong></td>
+<td>Gemma-2-2B-IT (Google) → Qwen-2.5-3B fallback</td>
+<td>Legal reasoning &amp; citation generation</td>
+</tr>
+<tr>
+<td><strong>Embeddings</strong></td>
+<td>BAAI/BGE-M3 (568M params)</td>
+<td>Dense + Sparse hybrid vector encoding</td>
+</tr>
+<tr>
+<td><strong>Reranker</strong></td>
+<td>BAAI/bge-reranker-v2-m3</td>
+<td>Cross-encoder precision re-scoring</td>
+</tr>
+<tr>
+<td><strong>ASR</strong></td>
+<td>faster-whisper-small</td>
+<td>Speech-to-text (Hindi, Tamil, English)</td>
+</tr>
+<tr>
+<td><strong>TTS</strong></td>
+<td>OmniVoice (k2-fsa)</td>
+<td>Cross-lingual text-to-speech</td>
+</tr>
+<tr>
+<td><strong>Vector DB</strong></td>
+<td>FAISS + BM25 (rank_bm25)</td>
+<td>Dense + Sparse retrieval with RRF fusion</td>
+</tr>
+<tr>
+<td><strong>Backend</strong></td>
+<td>FastAPI + uvicorn</td>
+<td>REST + SSE streaming APIs</td>
+</tr>
+<tr>
+<td><strong>Frontend (App)</strong></td>
+<td>React Native + Expo SDK 57</td>
+<td>Cross-platform (Web/iOS/Android)</td>
+</tr>
+<tr>
+<td><strong>Frontend (Tester)</strong></td>
+<td>Vanilla HTML/CSS/JS</td>
+<td>Debug &amp; benchmark studio</td>
+</tr>
+<tr>
+<td><strong>GPU</strong></td>
+<td>Kaggle T4×2 (2×16GB VRAM)</td>
+<td>Free dual-GPU inference</td>
+</tr>
+<tr>
+<td><strong>Tunnel</strong></td>
+<td>localtunnel + cloudflared</td>
+<td>HTTPS public URL</td>
+</tr>
+</tbody>
+</table>
+<p><strong>VRAM Budget:</strong>
+- GPU 0: Gemma-2-2B LLM (~4GB) + Whisper ASR (~0.5GB)
+- GPU 1: BGE-M3 (~1.2GB) + Reranker (~1.2GB) + OmniVoice TTS (~2.5GB)
+- Remaining: ~22GB free for future models</p>
+<hr />
+<h2>SLIDE 3 — System Architecture</h2>
+<pre><code>USER (Voice / Text / Document Scan)
+        │
+   ┌────▼──────────┐
+   │ React Native   │  Expo SDK 57 — Web + iOS + Android
+   │ + Tester UI    │  TypeScript, Zustand, TanStack Query
+   └────┬──────────┘
+        │ HTTPS / SSE Streaming
+   ┌────▼──────────┐
+   │ FastAPI Server │  Kaggle T4×2 GPU
+   │ (uvicorn)     │  localtunnel + cloudflared
+   └────┬──────────┘
+        │
+  ┌─────┼─────────┬──────────────┐
+  │     │         │              │
+  ▼     ▼         ▼              ▼
+┌────┐ ┌────┐  ┌──────────┐  ┌──────┐
+│ASR │ │TTS │  │ RAG      │  │ LLM  │
+│    │ │    │  │ Pipeline │  │      │
+│Whi-│ │Omni│  │          │  │Gemma │
+│sper│ │Voi-│  │BGE-M3    │  │2-2B  │
+│Sml │ │ce  │  │→FAISS    │  │ IT   │
+│    │ │    │  │+BM25     │  │      │
+│GPU1│ │GPU1│  │→RRF      │  │GPU 0 │
+│    │ │    │  │→Reranker │  │      │
+└────┘ └────┘  └──────────┘  └──┬───┘
+                                │
+                    ┌───────────▼──────────┐
+                    │ Cited Legal Answer   │
+                    │ + Confidence Score   │
+                    │ + Audio Response     │
+                    └─────────────────────┘
+</code></pre>
+<p><strong>Pipeline:</strong> Query → BGE-M3 Embed → FAISS Dense + BM25 Sparse → RRF Fusion (k=60) → Cross-Encoder Rerank → Top-7 Context → Gemma-2-2B → Cited Answer</p>
+<hr />
+<h2>SLIDE 4 — RAG Database &amp; Data Pipeline</h2>
+<p><strong>6,643 UDO Records | 3 Statutory Corpora</strong></p>
+<table>
+<thead>
+<tr>
+<th>Corpus</th>
+<th>Source File</th>
+<th>Content</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Patents Act, 1970</strong></td>
+<td>patent act 1970.txt</td>
+<td>Sections 1-163 — patentability, §3(p) TK bar, opposition</td>
+</tr>
+<tr>
+<td><strong>Patents Rules, 2003</strong></td>
+<td>patents-rules2003.txt</td>
+<td>Rules 1-190 — filing, forms, deadlines</td>
+</tr>
+<tr>
+<td><strong>D&amp;C Act 1940 + Rules 1945</strong></td>
+<td>2016DrugsAndCosmetics...</td>
+<td>Ch IV-A AYUSH drugs, Schedule T GMP, Rule 161B shelf-life</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Data Pipeline (build_rag_database.py — Pure Python, zero deps):</strong></p>
+<pre><code>Raw .txt statutory files
+  → Line-by-line regex parsing
+  → Section/Rule boundary detection
+  → Hierarchical chunking (section-level, NOT naive token splits)
+  → UDO JSON schema: {doc_id, title, content, content_plain, rag_config{}}
+  → Per-record metadata: act_name, section_no, chapter, citation_format
+  → BGE-M3 embedding (1024-dim dense + sparse BM25 tokens)
+  → FAISS IndexFlatIP + BM25Okapi index
+  → 6,643 searchable records
+</code></pre>
+<p><strong>Retrieval Pipeline:</strong>
+1. <strong>Dense Search</strong> — FAISS cosine similarity (top-40)
+2. <strong>Sparse Search</strong> — BM25 keyword match (top-40)
+3. <strong>RRF Fusion</strong> — Reciprocal Rank Fusion (k=60)
+4. <strong>Cross-Encoder Rerank</strong> — bge-reranker-v2-m3 (top-7)
+5. <strong>Context Assembly</strong> — 4000 chars/doc, 7 docs → LLM</p>
+<hr />
+<h2>SLIDE 5 — App Features &amp; UI</h2>
+<p><strong>Cross-Platform — React Native + Expo SDK 57</strong></p>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Implementation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>💬 <strong>RAG Chat</strong></td>
+<td>Streaming SSE responses, markdown rendering, citation extraction</td>
+</tr>
+<tr>
+<td>🎙️ <strong>Voice Input</strong></td>
+<td>faster-whisper ASR → Hindi/Tamil/English transcription</td>
+</tr>
+<tr>
+<td>🔊 <strong>Voice Output</strong></td>
+<td>OmniVoice TTS — cross-lingual speech synthesis</td>
+</tr>
+<tr>
+<td>📋 <strong>Formulation Classifier</strong></td>
+<td>/api/classify — ingredients → regulatory pathway</td>
+</tr>
+<tr>
+<td>📜 <strong>Legal Citations</strong></td>
+<td>Auto-extracted [Section X, Act Y] from every response</td>
+</tr>
+<tr>
+<td>🟢🟡🔴 <strong>Confidence Score</strong></td>
+<td>HIGH / MEDIUM / LOW based on retrieval + citation quality</td>
+</tr>
+<tr>
+<td>⚠️ <strong>Safe Abstention</strong></td>
+<td>"Insufficient info → consult IP attorney" + escalation</td>
+</tr>
+<tr>
+<td>🧪 <strong>Testing Studio</strong></td>
+<td>Full debug UI — VRAM telemetry, latency metrics, source explorer</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Frontend Stack:</strong>
+- React Native 0.86 + Expo SDK 57 (New Architecture — Fabric + TurboModules)
+- TypeScript, Zustand state, TanStack Query v5, Lucide icons
+- expo-camera, expo-speech, expo-image-picker, react-native-reanimated
+- Tester: Vanilla HTML/CSS/JS — Feather icons, JetBrains Mono, marked.js</p>
+<hr />
+<h2>SLIDE 6 — Benchmarks, Impact &amp; Team</h2>
+<p><strong>Performance (Auto-Test Suite — 5 core prompts)</strong></p>
+<table>
+<thead>
+<tr>
+<th>Test Case</th>
+<th>Expected</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Ashwagandha patentability</td>
+<td>Section 3(p)</td>
+<td>✓ Citation found</td>
+</tr>
+<tr>
+<td>Spurious AYUSH drug</td>
+<td>Section 33EEA</td>
+<td>✓ Citation found</td>
+</tr>
+<tr>
+<td>Churna shelf life</td>
+<td>Rule 161B</td>
+<td>✓ Citation found</td>
+</tr>
+<tr>
+<td>Bhasma GMP requirements</td>
+<td>Schedule T</td>
+<td>✓ Citation found</td>
+</tr>
+<tr>
+<td>First Schedule books</td>
+<td>First Schedule</td>
+<td>✓ Citation found</td>
+</tr>
+</tbody>
+</table>
+<p><strong>System Metrics:</strong>
+- 6,643 RAG records indexed (FAISS + BM25)
+- Hybrid retrieval: Dense + Sparse + RRF + Cross-Encoder
+- Streaming responses via SSE (real-time token output)
+- Dual-GPU placement (GPU 0: LLM, GPU 1: Embeddings + ASR + TTS)</p>
+<p><strong>Impact:</strong>
+- AYUSH practitioners get instant, cited IPR guidance
+- Prevents biopiracy of traditional formulations
+- Voice-first — accessible to non-English speakers
+- 100% open-source — zero licensing cost</p>
+<p><strong>Team (6 Members):</strong></p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>ML/AI — LLM integration, RAG pipeline, benchmarking</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Backend — FastAPI, Kaggle deployment, GPU management</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Frontend — React Native app, Expo, UI/UX</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Data — Statutory parsing, chunking, RAG database</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Speech — ASR (Whisper), TTS (OmniVoice), multilingual</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Research — Legal domain expertise, test cases, evaluation</td>
+</tr>
+</tbody>
+</table></body></html>

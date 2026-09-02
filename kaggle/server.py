@@ -59,12 +59,23 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # HuggingFace authentication (Gemma is a gated model)
 HF_TOKEN = os.environ.get("HF_TOKEN", os.environ.get("HUGGING_FACE_HUB_TOKEN", ""))
-try:
-    from huggingface_hub import login
-    login(token=HF_TOKEN, add_to_git_credential=False)
-    print("✓ Logged into HuggingFace Hub", flush=True)
-except Exception as e:
-    print(f"HF login warning: {e}", flush=True)
+if not HF_TOKEN:
+    try:
+        from kaggle_secrets import UserSecretsClient
+        user_secrets = UserSecretsClient()
+        HF_TOKEN = user_secrets.get_secret("HF_TOKEN")
+    except Exception:
+        pass
+
+if HF_TOKEN:
+    try:
+        from huggingface_hub import login
+        login(token=HF_TOKEN, add_to_git_credential=False)
+        print("✓ Logged into HuggingFace Hub with HF_TOKEN", flush=True)
+    except Exception as e:
+        print(f"HF login warning: {e}", flush=True)
+else:
+    print("ℹ No HF_TOKEN detected — ungated model fallbacks will be used if needed", flush=True)
 
 # Install localtunnel
 os.system("npm install -g localtunnel 2>/dev/null || true")
@@ -212,10 +223,10 @@ class RAGDatabase:
         for r in self.records:
             # Combine title + content for richer embedding
             text = f"{r['title']}\n{r.get('content_plain', r.get('content', ''))}"
-            # Truncate to ~512 tokens worth (~2000 chars)
-            texts.append(text[:2000])
+            # Truncate to ~750 tokens worth (~3000 chars) — BGE-M3 supports 8192 tokens
+            texts.append(text[:3000])
             # Tokenize for BM25 (lowercase, split on whitespace + punctuation)
-            tokens = re.findall(r'\w+', text[:2000].lower())
+            tokens = re.findall(r'\w+', text[:3000].lower())
             tokenized_corpus.append(tokens)
 
         # --- Dense: FAISS ---
@@ -330,7 +341,7 @@ class RAGDatabase:
         pairs = []
         for r in results:
             text = f"{r['title']}\n{r.get('content_plain', r.get('content', ''))}"
-            pairs.append([query, text[:1500]])
+            pairs.append([query, text[:3000]])
 
         # Score
         scores = self.reranker.predict(pairs)
@@ -344,8 +355,8 @@ class RAGDatabase:
 
     def hybrid_search(self, query: str, top_k: int = 7) -> List[Dict]:
         """Full hybrid search: Dense+Sparse(RRF) retrieval → cross-encoder reranking → top-k."""
-        # Step 1: Hybrid search with RRF (top-25 candidates from FAISS + BM25)
-        candidates = self.search(query, top_k=25)
+        # Step 1: Hybrid search with RRF (top-40 candidates from FAISS + BM25 for better coverage)
+        candidates = self.search(query, top_k=40)
 
         # Step 2: Rerank with cross-encoder (top-7 for broader statutory coverage)
         reranked = self.rerank(query, candidates, top_k=top_k)
@@ -370,25 +381,26 @@ class RAGDatabase:
 # ============================================================
 
 class LLMManager:
-    """Manages Gemma 2 2B-IT loading in float16.
-    ~4GB VRAM, ~80-100 tok/s on T4, 10-20s per response.
-    Proven pattern from gemma + omnivoice reference project.
+    """Manages LLM loading in float16 on GPU 0 with multi-tiered fallback:
+    1. Local pre-cached Gemma 2 2B (/kaggle/input/...)
+    2. Hugging Face Hub Gemma 2 2B-IT (if gated access/token available)
+    3. Qwen 2.5 3B-Instruct (100% ungated, top-tier legal reasoning, 32k context)
+    4. Qwen 2.5 1.5B-Instruct (100% ungated fast fallback)
     """
 
-    # Kaggle pre-cached path (zero download)
     KAGGLE_MODEL_PATH = "/kaggle/input/gemma-2/transformers/gemma-2-2b-it/1"
-    HF_FALLBACK = "google/gemma-2-2b-it"
 
     def __init__(self):
         self.model = None
         self.tokenizer = None
         self.model_name = None
-        self.engine_type = "gemma-2b-fp16"
+        self.model_id = None
+        self.engine_type = "fp16"
         self.device = "cuda:0"
         self.loaded = False
 
     def load(self, device="cuda:0"):
-        """Load Gemma 2 2B-IT in float16 — fast, lightweight, no quantization."""
+        """Load LLM in float16 with robust multi-tiered fallback."""
         from transformers import AutoTokenizer, AutoModelForCausalLM
 
         self.device = device
@@ -396,81 +408,100 @@ class LLMManager:
         free = vram_free(gpu_idx)
         print(f"\n  LLM Loading — Available VRAM on {device}: {free:.1f}GB", flush=True)
 
-        # Find model: Kaggle pre-cached → auto-discover → HuggingFace Hub
-        model_id = None
+        # Build prioritized list of model candidates to try
+        candidates = []
 
+        # 1. Kaggle pre-cached path
         if os.path.isdir(self.KAGGLE_MODEL_PATH):
-            model_id = self.KAGGLE_MODEL_PATH
-            print(f"  ✓ Found Kaggle pre-cached model: {model_id}", flush=True)
-        else:
-            # Auto-discover any gemma model in /kaggle/input
-            if os.path.exists("/kaggle/input"):
-                print("  Scanning /kaggle/input for gemma models...", flush=True)
-                for root, dirs, files in os.walk("/kaggle/input"):
-                    if "config.json" in files and "gemma" in root.lower():
-                        model_id = root
-                        print(f"  ✓ Auto-discovered model: {model_id}", flush=True)
+            candidates.append(("Gemma-2-2B-IT (Kaggle Pre-cached)", self.KAGGLE_MODEL_PATH, False))
+
+        # 2. Any auto-discovered model in /kaggle/input
+        if os.path.exists("/kaggle/input"):
+            for root, dirs, files in os.walk("/kaggle/input"):
+                if "config.json" in files:
+                    if "gemma" in root.lower():
+                        candidates.append(("Gemma (Auto-discovered)", root, False))
                         break
-            if not model_id:
-                model_id = self.HF_FALLBACK
-                print(f"  → Using HuggingFace Hub fallback: {model_id}", flush=True)
+                    elif "qwen" in root.lower():
+                        candidates.append(("Qwen (Auto-discovered)", root, False))
+                        break
 
-        load_kwargs = {"trust_remote_code": True, "token": HF_TOKEN}
+        # 3. Gemma 2 2B from HF Hub (if token available or tried first)
+        candidates.append(("Gemma-2-2B-IT (HF Hub)", "google/gemma-2-2b-it", True))
 
-        try:
-            print(f"  [LOAD] Gemma 2 2B-IT (float16) from: {model_id}", flush=True)
-            vram_report("pre-gemma")
+        # 4. Qwen 2.5 3B-Instruct (UNGATED, top-tier quality, fast)
+        candidates.append(("Qwen-2.5-3B-Instruct (Ungated)", "Qwen/Qwen2.5-3B-Instruct", False))
 
-            self.tokenizer = AutoTokenizer.from_pretrained(model_id, **load_kwargs)
+        # 5. Qwen 2.5 1.5B-Instruct (UNGATED compact fallback)
+        candidates.append(("Qwen-2.5-1.5B-Instruct (Ungated Fallback)", "Qwen/Qwen2.5-1.5B-Instruct", False))
 
-            self.model = AutoModelForCausalLM.from_pretrained(
-                model_id,
-                device_map={"": device},
-                torch_dtype=torch.float16,
-                attn_implementation="sdpa",
-                **load_kwargs,
-            )
-            self.model.eval()
+        for display_name, model_path, is_gated in candidates:
+            print(f"\n  → Attempting to load: {display_name} [{model_path}]...", flush=True)
+            load_kwargs = {"trust_remote_code": True}
+            if is_gated and HF_TOKEN:
+                load_kwargs["token"] = HF_TOKEN
 
-            # Apply torch.compile for graph fusion & kernel acceleration
             try:
-                print("  Compiling Gemma with torch.compile(mode='reduce-overhead')...", flush=True)
-                self.model = torch.compile(self.model, mode="reduce-overhead")
-                print("  ✓ Gemma 2 2B compiled successfully!", flush=True)
-            except Exception as comp_err:
-                print(f"  Note: torch.compile skipped: {comp_err}", flush=True)
+                vram_report(f"pre-{display_name[:10]}")
+                self.tokenizer = AutoTokenizer.from_pretrained(model_path, **load_kwargs)
 
-            self.model_name = "Gemma-2-2B-IT (float16 + SDPA)"
-            self.engine_type = "gemma-2b-fp16-compiled"
-            self.loaded = True
-            print(f"  ✓ {self.model_name} loaded successfully on {device}!", flush=True)
-            vram_report("post-gemma")
-            return True
+                # Ensure pad_token is defined
+                if self.tokenizer.pad_token is None:
+                    self.tokenizer.pad_token = self.tokenizer.eos_token
 
-        except Exception as e:
-            print(f"  ✗ Gemma FAILED: {e}", flush=True)
-            if self.model is not None:
-                del self.model
-                self.model = None
-            if self.tokenizer is not None:
-                del self.tokenizer
-                self.tokenizer = None
-            cleanup_gpu(gpu_idx)
-            vram_report("cleanup-gemma")
-            return False
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    model_path,
+                    device_map={"": device},
+                    torch_dtype=torch.float16,
+                    attn_implementation="sdpa",
+                    **load_kwargs,
+                )
+                self.model.eval()
 
-    def generate(self, system_prompt: str, user_message: str, max_tokens: int = 384) -> str:
-        """Generate response with Gemma 2 2B-IT.
-        NOTE: Gemma does NOT support role='system' — we merge system+user into one user message.
-        """
-        if not self.loaded:
-            return "Error: LLM not loaded."
+                # Attempt torch.compile acceleration
+                try:
+                    print(f"  Compiling {display_name} with torch.compile...", flush=True)
+                    self.model = torch.compile(self.model, mode="reduce-overhead")
+                    print(f"  ✓ {display_name} compiled successfully!", flush=True)
+                except Exception as comp_err:
+                    print(f"  Note: torch.compile skipped ({comp_err})", flush=True)
 
-        # Gemma chat template: system prompt merged into user message
-        combined = f"[CONTEXT]\n{system_prompt}\n[/CONTEXT]\n\n{user_message}"
-        messages = [
-            {"role": "user", "content": combined},
-        ]
+                self.model_name = display_name
+                self.model_id = model_path
+                self.engine_type = "fp16-sdpa"
+                self.loaded = True
+                print(f"  ✓ SUCCESS: {display_name} loaded on {device}!", flush=True)
+                vram_report("post-llm")
+                return True
+
+            except Exception as e:
+                print(f"  ✗ Failed to load {display_name}: {e}", flush=True)
+                if self.model is not None:
+                    del self.model
+                    self.model = None
+                if self.tokenizer is not None:
+                    del self.tokenizer
+                    self.tokenizer = None
+                cleanup_gpu(gpu_idx)
+                continue
+
+        print("  ✗ FATAL: All LLM candidates failed to load.", flush=True)
+        return False
+
+    def prepare_inputs(self, system_prompt: str, user_message: str):
+        """Prepare chat template token inputs according to model family."""
+        if not self.loaded or self.tokenizer is None:
+            return None
+
+        # Gemma format (merged context in user message) vs standard system/user format (Qwen/Llama)
+        if "gemma" in str(self.model_name).lower() or "gemma" in str(self.model_id).lower():
+            combined = f"[CONTEXT]\n{system_prompt}\n[/CONTEXT]\n\n{user_message}"
+            messages = [{"role": "user", "content": combined}]
+        else:
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ]
 
         inputs = self.tokenizer.apply_chat_template(
             messages,
@@ -480,15 +511,23 @@ class LLMManager:
             return_dict=True,
         ).to(self.model.device)
 
+        return inputs
+
+    def generate(self, system_prompt: str, user_message: str, max_tokens: int = 1024) -> str:
+        """Generate response with loaded LLM."""
+        if not self.loaded:
+            return "Error: LLM not loaded."
+
+        inputs = self.prepare_inputs(system_prompt, user_message)
         input_len = inputs["input_ids"].shape[1]
 
         with torch.inference_mode():
             output = self.model.generate(
                 **inputs,
                 max_new_tokens=max_tokens,
-                temperature=0.05,
-                top_p=0.9,
-                repetition_penalty=1.1,
+                temperature=0.3,
+                top_p=0.92,
+                repetition_penalty=1.15,
                 do_sample=True,
                 use_cache=True,
             )
@@ -766,7 +805,10 @@ class OmniVoiceTTSManager:
 # ============================================================
 
 # System prompt — enforces citations, comprehensive answers, and Latin-script Hindi
-SYSTEM_PROMPT = """You are AYUSH-IPR GUARDIAN, an AI-powered Ayurveda IPR and Regulatory Assistant specialized in Indian Patent Law (Patents Act, 1970), Patent Rules (2003, as amended 2024), and the Drugs & Cosmetics Act, 1940 (Chapter IV-A for AYUSH drugs).
+SYSTEM_PROMPT = """You are AYUSH-IPR GUARDIAN, an expert AI-powered Ayurveda IPR and Regulatory Assistant specialized in Indian Patent Law (Patents Act, 1970), Patent Rules (2003, as amended 2024), and the Drugs & Cosmetics Act, 1940 (Chapter IV-A for AYUSH drugs).
+
+CORE IDENTITY:
+You are a thorough, knowledgeable legal research assistant. Your goal is to provide COMPREHENSIVE, DETAILED, and WELL-STRUCTURED answers that fully address the user's question. Think of yourself as a senior IP attorney drafting a legal opinion memo.
 
 STRICT RULES:
 1. ONLY use information from the provided CONTEXT documents below. Do NOT hallucinate or invent section numbers.
@@ -787,11 +829,14 @@ STRICT RULES:
 10. LANGUAGE RULE: When writing Hindi, Tamil, or any Indian language, ALWAYS use Latin/Roman script (transliteration). Keep legal terms in English.
 
 MANDATORY RESPONSE FORMAT:
-- Answer proportionally: simple questions get concise answers, complex legal questions get detailed analysis.
-- Structure your answer with numbered points and sub-sections when appropriate.
-- Quote the EXACT statutory text from the CONTEXT wherever possible.
+- Provide THOROUGH, DETAILED answers. DO NOT be brief or terse. Elaborate fully on each point.
+- For legal questions, write at least 3-5 paragraphs covering: (a) the direct answer, (b) relevant statutory provisions with exact quotes, (c) practical implications, (d) related cross-references.
+- Structure your answer with numbered points, sub-sections, and bullet points when appropriate.
+- Quote the EXACT statutory text from the CONTEXT wherever possible — reproduce the relevant portions verbatim.
 - Cross-reference related sections (e.g., linking Section 25 opposition to Section 64 revocation).
 - Cite EVERY relevant section with full format: [Section X, Patents Act, 1970].
+- Explain the legal significance and practical impact of each provision you cite.
+- If multiple CONTEXT documents are relevant, synthesize information from ALL of them.
 
 CONTEXT (Retrieved from verified statutory database):
 {context}
@@ -802,12 +847,12 @@ USER QUERY:
 
 def build_context_string(results: List[Dict]) -> str:
     """Build formatted context string from search results.
-    Expanded content cap from 1500→2000 chars for richer statutory context."""
+    Expanded content cap to 4000 chars for full statutory text coverage."""
     context_parts = []
     for i, r in enumerate(results, 1):
         citation = r.get("rag_config", {}).get("citation_format", r.get("doc_id", ""))
         title = r.get("title", "")
-        content = r.get("content", "")[:2000]  # Expanded from 1500 for richer context
+        content = r.get("content", "")[:4000]  # 4000 chars — captures full statutory sections with provisos
         importance = r.get("rag_config", {}).get("importance_score", 0)
         rerank = r.get("rerank_score", r.get("similarity_score", 0))
 
@@ -854,16 +899,22 @@ def rag_query(query: str, rag_db: RAGDatabase, llm: LLMManager) -> dict:
         }
 
     # Step 1: Hybrid search (Dense FAISS + Sparse BM25 with RRF fusion) → rerank with cross-encoder
-    results = rag_db.hybrid_search(query, top_k=4)  # Top-4 reranked documents for crisp, ultra-low latency context
+    results = rag_db.hybrid_search(query, top_k=7)  # Top-7 reranked documents for comprehensive statutory coverage
     search_time = time.time() - t0
 
-    # Step 2: Build context from top-4 reranked results
+    # Step 1.5: Filter out empty/near-empty results that waste context slots
+    results = [r for r in results if len(r.get('content', '')) > 50]
+    if not results:
+        # Fallback: if all results were empty, use originals (title-only)
+        results = rag_db.hybrid_search(query, top_k=7)
+
+    # Step 2: Build context from reranked results (up to 7 docs)
     context = build_context_string(results)
 
-    # Step 3: Generate with LLM
+    # Step 3: Generate with LLM — 1024 tokens allows detailed, comprehensive legal analysis
     t1 = time.time()
     prompt = SYSTEM_PROMPT.format(context=context, query=query)
-    answer = llm.generate(prompt, query, max_tokens=384)
+    answer = llm.generate(prompt, query, max_tokens=1024)
     gen_time = time.time() - t1
 
     # Step 4: Extract citations from answer
@@ -1003,32 +1054,27 @@ async def chat_stream(req: ChatRequest):
 
     # Step 1: Hybrid search + rerank (same as non-streaming)
     t0 = time.time()
-    results = rag_db.hybrid_search(req.query, top_k=4)
+    results = rag_db.hybrid_search(req.query, top_k=7)
+    # Filter out empty/near-empty results that waste context slots
+    results = [r for r in results if len(r.get('content', '')) > 50]
+    if not results:
+        results = rag_db.hybrid_search(req.query, top_k=7)
     search_time = time.time() - t0
     context = build_context_string(results)
 
-    # Step 2: Prepare prompt (Gemma: merge system into user)
+    # Step 2: Prepare prompt
     prompt = SYSTEM_PROMPT.format(context=context, query=req.query)
-    combined = f"[CONTEXT]\n{prompt}\n[/CONTEXT]\n\n{req.query}"
-    messages = [{"role": "user", "content": combined}]
-
-    inputs = llm.tokenizer.apply_chat_template(
-        messages,
-        add_generation_prompt=True,
-        tokenize=True,
-        return_tensors="pt",
-        return_dict=True,
-    ).to(llm.model.device)
+    inputs = llm.prepare_inputs(prompt, req.query)
 
     # Step 3: Stream tokens via TextIteratorStreamer
     streamer = TextIteratorStreamer(llm.tokenizer, skip_prompt=True, skip_special_tokens=True)
 
     gen_kwargs = {
         **{k: v for k, v in inputs.items()},
-        "max_new_tokens": 384,
-        "temperature": 0.05,
-        "top_p": 0.9,
-        "repetition_penalty": 1.1,
+        "max_new_tokens": 1024,
+        "temperature": 0.3,
+        "top_p": 0.92,
+        "repetition_penalty": 1.15,
         "do_sample": True,
         "use_cache": True,
         "streamer": streamer,

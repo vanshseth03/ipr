@@ -8,7 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- STATE ---
   const state = {
-    baseUrl: 'https://tired-schools-sneeze.loca.lt',
+    baseUrl: 'https://breezy-windows-doubt.loca.lt',
     bypassLocaltunnel: true,
     isConnected: false,
     ragDbRecords: [],
