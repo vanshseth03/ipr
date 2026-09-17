@@ -19,46 +19,36 @@ Voice Pipeline: Mic → Whisper ASR → RAG Chat → OmniVoice TTS → Speaker
 """
 
 # ============================================================
-# CELL 1: INSTALL DEPENDENCIES & FAST STARTUP OPTIMIZATION
+# CELL 1: INSTALL DEPENDENCIES
 # ============================================================
-import subprocess, sys, os, time, shutil
+import subprocess, sys, os, time
+
+def install(packages):
+    for p in packages:
+        print(f"  Installing {p}...", flush=True)
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", p],
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 print("=" * 60)
-print("  AYUSH-IPR GUARDIAN — Fast Startup Initialization")
+print("  AYUSH-IPR GUARDIAN — Installing dependencies")
 print("=" * 60, flush=True)
 
-# 1. Download Cloudflare Tunnel binary directly (takes ~1-2 seconds)
-if not os.path.exists("/usr/local/bin/cloudflared"):
-    print("  Downloading Cloudflare Tunnel (cloudflared)...", flush=True)
-    os.system("curl -sL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared && chmod +x /usr/local/bin/cloudflared")
-
-# 2. Check ffmpeg (Kaggle has ffmpeg pre-installed; avoid running slow apt-get if present)
-if shutil.which("ffmpeg") is None:
-    print("  Installing ffmpeg...", flush=True)
-    os.system("apt-get update -qq && apt-get install -y ffmpeg >/dev/null 2>&1 || true")
-
-# 3. Batch pip install only missing packages in a single command
-required_packages = [
-    "transformers>=4.51.0",
+install([
+    "transformers>=4.51.0",    # Gemma 2 2B supported by released transformers
     "accelerate",
-    "sentence-transformers",
-    "faiss-cpu",
-    "rank-bm25",
-    "faster-whisper",
-    "omnivoice",
-    "soundfile",
+    "sentence-transformers",  # BGE-M3 embeddings + reranker
+    "faiss-cpu",              # Vector search
+    "rank-bm25",              # BM25 sparse retrieval
+    "faster-whisper",         # ASR
+    "omnivoice",              # TTS — cross-lingual speech synthesis
+    "soundfile",              # WAV I/O for TTS
     "fastapi",
     "uvicorn",
     "nest-asyncio",
     "python-multipart",
     "pydantic",
     "hf_transfer",
-]
-print("  Installing dependencies in batch...", flush=True)
-subprocess.check_call(
-    [sys.executable, "-m", "pip", "install", "-q", "--disable-pip-version-check", "--no-warn-script-location"] + required_packages,
-    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-)
+])
 
 # Enable fast HF downloads
 os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
@@ -85,7 +75,13 @@ if HF_TOKEN:
 else:
     print("ℹ No HF_TOKEN detected — ungated model fallbacks will be used if needed", flush=True)
 
-print("✓ Fast startup dependencies ready", flush=True)
+# Install localtunnel
+os.system("npm install -g localtunnel 2>/dev/null || true")
+
+# Install ffmpeg for audio
+os.system("apt-get update -qq && apt-get install -y ffmpeg >/dev/null 2>&1 || true")
+
+print("✓ All dependencies installed", flush=True)
 
 # ============================================================
 # CELL 2: IMPORTS
@@ -214,50 +210,13 @@ class RAGDatabase:
         vram_report("post-reranker")
 
     def build_index(self):
-        """Embed all records and build FAISS vector index + BM25 sparse index with fast-path caching."""
+        """Embed all records and build FAISS vector index + BM25 sparse index."""
         import faiss
-        import pickle
         from rank_bm25 import BM25Okapi
 
-        print(f"  Initializing FAISS + BM25 hybrid index for {len(self.records)} records...", flush=True)
+        print(f"  Building FAISS + BM25 hybrid index for {len(self.records)} records...", flush=True)
 
-        # ⚡ Fast-path: Check for pre-computed FAISS index & BM25 corpus on disk
-        faiss_candidates = [
-            "/kaggle/working/faiss_bge_m3.index",
-            "/kaggle/input/ayush-ipr-rag-database/faiss_bge_m3.index",
-            "/kaggle/input/ayush-ipr-rag-database/ayush-ipr-rag-database/faiss_bge_m3.index",
-        ]
-        bm25_candidates = [
-            "/kaggle/working/bm25_corpus.pkl",
-            "/kaggle/input/ayush-ipr-rag-database/bm25_corpus.pkl",
-            "/kaggle/input/ayush-ipr-rag-database/ayush-ipr-rag-database/bm25_corpus.pkl",
-        ]
-        if os.path.exists("/kaggle/input"):
-            for root, dirs, files in os.walk("/kaggle/input"):
-                for fname in files:
-                    if fname == "faiss_bge_m3.index":
-                        faiss_candidates.append(os.path.join(root, fname))
-                    elif fname == "bm25_corpus.pkl":
-                        bm25_candidates.append(os.path.join(root, fname))
-
-        found_faiss = next((p for p in faiss_candidates if os.path.exists(p) and os.path.getsize(p) > 500000), None)
-        found_bm25 = next((p for p in bm25_candidates if os.path.exists(p) and os.path.getsize(p) > 50000), None)
-
-        if found_faiss and found_bm25:
-            try:
-                t0 = time.time()
-                print(f"  ⚡ Fast Load: Pre-computed FAISS index found at {found_faiss}", flush=True)
-                self.index = faiss.read_index(found_faiss)
-                with open(found_bm25, "rb") as f:
-                    self.bm25_corpus = pickle.load(f)
-                self.bm25 = BM25Okapi(self.bm25_corpus)
-                self.loaded = True
-                print(f"  ✓ Pre-computed Hybrid index loaded in {time.time() - t0:.2f}s! {self.index.ntotal} vectors + BM25 ({len(self.bm25_corpus)} docs)", flush=True)
-                return
-            except Exception as e:
-                print(f"  Warning loading pre-computed index: {e}. Falling back to dynamic build.", flush=True)
-
-        # Fallback: Dynamic build with optimized batch size and inference mode
+        # Prepare texts for embedding
         texts = []
         tokenized_corpus = []
         for r in self.records:
@@ -269,14 +228,14 @@ class RAGDatabase:
             tokens = re.findall(r'\w+', text[:3000].lower())
             tokenized_corpus.append(tokens)
 
-        # --- Dense: FAISS with high-throughput batching ---
-        with torch.inference_mode():
-            self.embeddings = self.embed_model.encode(
-                texts,
-                batch_size=64,
-                show_progress_bar=True,
-                normalize_embeddings=True,
-            )
+        # --- Dense: FAISS ---
+        # Batch encode
+        self.embeddings = self.embed_model.encode(
+            texts,
+            batch_size=32,
+            show_progress_bar=True,
+            normalize_embeddings=True,
+        )
 
         # Build FAISS index (inner product for normalized vectors = cosine)
         dim = self.embeddings.shape[1]
@@ -286,15 +245,6 @@ class RAGDatabase:
         # --- Sparse: BM25 ---
         self.bm25 = BM25Okapi(tokenized_corpus)
         self.bm25_corpus = tokenized_corpus
-
-        # Save to /kaggle/working/ for instant recovery on restart
-        try:
-            faiss.write_index(self.index, "/kaggle/working/faiss_bge_m3.index")
-            with open("/kaggle/working/bm25_corpus.pkl", "wb") as f:
-                pickle.dump(self.bm25_corpus, f, protocol=pickle.HIGHEST_PROTOCOL)
-            print("  ✓ Cached pre-computed index & BM25 corpus to /kaggle/working/ for subsequent instant boots", flush=True)
-        except Exception as e:
-            print(f"  Note: Cache save note: {e}", flush=True)
 
         self.loaded = True
         print(f"  ✓ Hybrid index built: {self.index.ntotal} vectors (dim={dim}) + BM25 ({len(tokenized_corpus)} docs)", flush=True)
@@ -521,107 +471,44 @@ class LLMManager:
         print("  ✗ FATAL: Could not load Gemma-2-2B-IT.", flush=True)
         return False
 
-    def prepare_inputs(self, system_prompt: str, user_message: str, is_hindi: bool = False, is_out_of_domain: bool = False, history: Optional[List[Dict]] = None, is_translation: bool = False, target_lang: str = "hi"):
-        """Prepare chat template token inputs according to model family with multi-turn history support."""
+    def prepare_inputs(self, system_prompt: str, user_message: str, is_hindi: bool = False, is_out_of_domain: bool = False):
+        """Prepare chat template token inputs according to model family."""
         if not self.loaded or self.tokenizer is None:
             return None
 
-        # Build multi-turn messages array with strict role alternation
-        messages = []
-        if history and len(history) > 0:
-            last_role = None
-            for turn in history[-6:]:
-                content = str(turn.get("content", "")).strip()
-                if not content:
-                    continue
-                role = turn.get("role", "user")
-                r = "model" if role in ("assistant", "model") else "user"
-                # First message in history must strictly be from user
-                if not messages and r != "user":
-                    continue
-                if r == last_role:
-                    messages[-1]["content"] += f"\n\n{content}"
-                else:
-                    messages.append({"role": r, "content": content})
-                    last_role = r
-
-            # Ensure multi-turn history ends on model turn so new query is user turn
-            while messages and messages[-1]["role"] == "user":
-                messages.pop()
-
-        # Ensure the first turn in conversation has the system persona prepended
-        if messages and messages[0]["role"] == "user":
-            base_persona = "You are AYUSH-IPR GUARDIAN, an expert AI legal advisory assistant for Indian Traditional Medicine (AYUSH) and Intellectual Property Law."
-            if not messages[0]["content"].startswith("You are AYUSH-IPR"):
-                messages[0]["content"] = f"{base_persona}\n\n" + messages[0]["content"]
-
         # Gemma format (merged context in user message) vs standard system/user format (Qwen/Llama)
         if "gemma" in str(self.model_name).lower() or "gemma" in str(self.model_id).lower():
-            if is_translation:
-                if target_lang == "hi" or "hindi" in target_lang.lower() or "हिंदी" in target_lang:
-                    latest_turn_content = (
-                        f"उपयोगकर्ता का अनुरोध: {user_message}\n\n"
-                        f"अति आवश्यक निर्देश:\n"
-                        f"1. ऊपर दिए गए सहायक (Assistant) के पिछले उत्तर का पूर्ण, सटीक और विस्तृत अनुवाद हिंदी (देवनागरी लिपि) में प्रस्तुत करें।\n"
-                        f"2. पिछले उत्तर के सभी मुख्य बिंदुओं (जैसे नियम, मानक, प्रक्रियाएं) का क्रमबद्ध और स्पष्ट अनुवाद दें।\n"
-                        f"3. कोई नया असंबद्ध विषय न जोड़ें और कोई काल्पनिक नया प्रश्न न बनाएं। सीधे अनुवाद से उत्तर प्रारंभ करें।"
-                    )
-                else:
-                    latest_turn_content = (
-                        f"User Request: {user_message}\n\n"
-                        f"CRITICAL INSTRUCTION:\n"
-                        f"1. Provide a complete, faithful, and detailed English translation of the previous Assistant response above.\n"
-                        f"2. Retain all regulatory points, statutory provisions, and step-by-step guidance.\n"
-                        f"3. Do NOT introduce new unrelated topics or ask new questions. Begin directly with the translated response."
-                    )
-                messages.append({"role": "user", "content": latest_turn_content})
-            elif is_out_of_domain:
+            if is_out_of_domain:
                 if is_hindi:
                     combined = (
                         f"{system_prompt}\n\n"
                         f"उपयोगकर्ता का प्रश्न: {user_message}\n\n"
-                        f"निर्देश: यह प्रश्न पारंपरिक चिकित्सा या कानून से असंबंधित है। 1-2 विनम्र वाक्यों में बताएं कि आप केवल आयुष और पेटेंट कानून के सलाहकार हैं, और उन्हें आयुष संबंधित प्रश्न पूछने को कहें।"
+                        f"निर्देश: उपयोगकर्ता के वास्तविक प्रश्न का उत्तर दें। यदि प्रश्न आयुष या पेटेंट कानून से असंबंधित है, तो स्पष्ट बताएं कि यह अप्रासंगिक (Irrelevant / Out-of-Domain) है और 1 वाक्य में संक्षिप्त व सही उत्तर दें। कोई भी नकली कानूनी प्रश्न न बनाएं।"
                     )
                 else:
                     combined = (
                         f"{system_prompt}\n\n"
                         f"User Query: {user_message}\n\n"
-                        f"Instruction: This inquiry appears completely off-topic. In 1-2 polite sentences, state that you specialize in AYUSH traditional medicine and patent law, and invite them to ask an AYUSH/IPR question."
+                        f"Instructions: Address the user's actual question directly. State that it is outside the scope of AYUSH IPR, answer briefly if factual, and invite AYUSH inquiries. Do not fabricate a fake question."
                     )
-                messages.append({"role": "user", "content": combined})
-            elif len(messages) > 0:
-                # Follow-up query in existing conversation
-                if is_hindi:
-                    combined = (
-                        f"{system_prompt}\n\n"
-                        f"उपयोगकर्ता का अनुवर्ती प्रश्न: {user_message}\n\n"
-                        f"निर्देश: यह पूर्व बातचीत का अनुवर्ती प्रश्न है। ऊपर दी गई बातचीत और वैधानिक संदर्भ के आधार पर उपयोगकर्ता के प्रश्न का सीधा, केंद्रित और कानूनी रूप से सही उत्तर हिंदी (देवनागरी) में प्रदान करें।"
-                    )
-                else:
-                    combined = (
-                        f"{system_prompt}\n\n"
-                        f"User Follow-up Query: {user_message}\n\n"
-                        f"Instruction: This is a follow-up inquiry continuing the previous dialogue. Using the conversation history and statutory context above, provide a direct, focused, and legally grounded advisory."
-                    )
-                messages.append({"role": "user", "content": combined})
             elif is_hindi:
                 combined = (
                     f"{system_prompt}\n\n"
                     f"उपयोगकर्ता का प्रश्न: {user_message}\n\n"
-                    f"निर्देश: ऊपर दिए गए संदर्भ के आधार पर उपयोगकर्ता के प्रश्न का सीधा, व्यावहारिक और कानूनी रूप से सही उत्तर हिंदी (देवनागरी) में प्रदान करें। प्रश्न के वास्तविक विषय (जैसे अंतरराष्ट्रीय पेटेंट कानून, पीसीटी, विदेशी फाइलिंग, या विशिष्ट फॉर्मूलेशन) को सीधे संबोधित करें और केवल प्रासंगिक कानूनी प्रावधानों का उल्लेख करें।"
+                    f"कृपया ऊपर दिए गए वैधानिक संदर्भ के आधार पर उपयोगकर्ता के वास्तविक प्रश्न का संपूर्ण, विस्तृत और सुव्यवस्थित कानूनी उत्तर केवल शुद्ध हिंदी (देवनागरी लिपि) में ही प्रदान करें। अपने मन से कोई अलग प्रश्न न बनाएं।"
                 )
-                messages.append({"role": "user", "content": combined})
             else:
                 combined = (
                     f"{system_prompt}\n\n"
                     f"User Query: {user_message}\n\n"
-                    f"Instruction: Provide a direct, helpful, and legally grounded advisory answering the user's specific inquiry based on the context above. Directly address the exact topic asked (e.g. international patent law, PCT, foreign filing, biopiracy defense, export licensing, or domestic patentability) using the relevant legal provisions without forcing unrelated statutes."
+                    f"Please provide a comprehensive, well-structured legal and regulatory advisory answering the user's actual inquiry based on the statutory context above. Do not alter the user's question."
                 )
-                messages.append({"role": "user", "content": combined})
+            messages = [{"role": "user", "content": combined}]
         else:
-            if not messages:
-                messages.append({"role": "system", "content": system_prompt})
-            messages.append({"role": "user", "content": user_message})
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ]
 
         inputs = self.tokenizer.apply_chat_template(
             messages,
@@ -633,22 +520,21 @@ class LLMManager:
 
         return inputs
 
-    def generate(self, system_prompt: str, user_message: str, max_tokens: int = 1024, is_hindi: bool = False, is_out_of_domain: bool = False, history: Optional[List[Dict]] = None, is_translation: bool = False, target_lang: str = "hi") -> str:
+    def generate(self, system_prompt: str, user_message: str, max_tokens: int = 1024, is_hindi: bool = False, is_out_of_domain: bool = False) -> str:
         """Generate response with loaded LLM."""
         if not self.loaded:
             return "Error: LLM not loaded."
 
-        inputs = self.prepare_inputs(system_prompt, user_message, is_hindi=is_hindi, is_out_of_domain=is_out_of_domain, history=history, is_translation=is_translation, target_lang=target_lang)
+        inputs = self.prepare_inputs(system_prompt, user_message, is_hindi=is_hindi, is_out_of_domain=is_out_of_domain)
         input_len = inputs["input_ids"].shape[1]
 
         with torch.inference_mode():
             output = self.model.generate(
                 **inputs,
                 max_new_tokens=max_tokens,
-                temperature=0.55,
-                top_p=0.90,
-                top_k=50,
-                repetition_penalty=1.08,
+                temperature=0.35,
+                top_p=0.92,
+                repetition_penalty=1.05,
                 do_sample=True,
                 use_cache=True,
             )
@@ -705,9 +591,7 @@ class ASRManager:
         if not self.loaded:
             return {"text": "", "language": "unknown", "error": "ASR not loaded"}
 
-        # Detect webm/opus container from browser MediaRecorder
-        suffix = ".webm" if audio_bytes.startswith(b"\x1a\x45\xdf\xa3") or b"webm" in audio_bytes[:50].lower() else ".wav"
-        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
             f.write(audio_bytes)
             tmp_path = f.name
 
@@ -1070,126 +954,126 @@ def is_hindi_query(text: str) -> bool:
     return len(matches) >= 2 or (len(words) <= 6 and len(matches) >= 1)
 
 
-SYSTEM_PROMPT_EN = """You are AYUSH-IPR GUARDIAN, a warm, supportive, and expert AI legal assistant for Indian Traditional Medicine (AYUSH) and Intellectual Property Law.
+SYSTEM_PROMPT_EN = """You are AYUSH-IPR GUARDIAN, an authoritative legal and regulatory assistant for Indian traditional medicine (AYUSH) intellectual property law.
 
-IMPORTANT: Always respond in the SAME LANGUAGE the user writes in. If they write in Hindi, respond in Hindi. If in English, respond in English. If in Tamil or any other language, respond in that language.
+DOMAIN & RELEVANCE RULES:
+- You are specialized strictly in Indian traditional medicine (AYUSH: Ayurveda, Yoga, Unani, Siddha, Homeopathy) and Intellectual Property Law (Patents Act 1970, Drugs and Cosmetics Act 1940, Biological Diversity Act 2002, TKDL).
+- ALWAYS directly address the user's actual inquiry. NEVER fabricate, hallucinate, or substitute a different question.
+- IF THE USER'S INQUIRY IS UNRELATED / OUT-OF-DOMAIN (such as general politics, politicians, sports, coding, entertainment, general knowledge like "who is PM of India"):
+  1. Clearly state that the inquiry is OUT OF SCOPE / IRRELEVANT to AYUSH intellectual property law.
+  2. If it is a simple factual question (e.g. current Prime Minister of India is Shri Narendra Modi), provide a brief, polite 1-sentence answer.
+  3. Guide the user back to asking questions about AYUSH patentability, Section 3(p), TKDL prior art, or regulatory compliance.
+  4. DO NOT generate the structured 5-part legal advisory template for out-of-scope inquiries.
 
-BEHAVIOR:
-- Be helpful, friendly, encouraging, and use clear simple language. Welcome greetings warmly.
-- Directly answer the specific question asked using the relevant legal provisions from the context below.
-- For international patent questions: Explain PCT, Paris Convention, Section 39 Foreign Filing License, TKDL agreements.
-- For domestic patentability: Cite Section 3(j), 3(p), 3(e), 3(d) of Patents Act 1970 as relevant.
-- For export/licensing: Cite D&C Act 1940, Schedule T GMP, Rule 161B, NBA approvals.
-- Only cite provisions directly relevant to the question — do NOT force-cite unrelated sections.
-- Precedent Disambiguation Rules:
-  * Turmeric Patent Revocation: USPTO Patent 5,401,504 (wound healing) revoked in 1997 after CSIR challenge citing Charaka Samhita, Sushruta Samhita, and JIMA.
-  * Neem Patent Revocation: EPO Patent 436,257 (fungicide) revoked in 2000 after EPO opposition.
-  * Divya Pharmacy v. Union of India (2018 Uttarakhand HC): Strictly about Biological Diversity Act 2002 Sections 7 & 21 (Fair and Equitable Benefit Sharing / ABS for Indian entities). NEVER conflate with turmeric or patent revocation.
-  * Novartis v. Union of India (2013 SC): Strictly about Section 3(d) therapeutic efficacy.
-- End legal evaluations with: "Disclaimer: This is statutory information, not formal legal advice. Consult a patent attorney for filing."
-- If a query is completely off-topic (coding, sports, gossip): politely decline in 1-2 sentences and invite AYUSH/IPR questions.
+FOR AYUSH & PATENT LEGAL INQUIRIES:
+- Provide a THOROUGH, IN-DEPTH, AND WELL-STRUCTURED LEGAL ADVISORY.
+- Structure your response clearly with headers:
+  1. Executive Summary: Direct, definitive legal conclusion answering the inquiry.
+  2. Statutory Provisions & Analysis: Detail applicable Sections of Patents Act 1970 (§3(p), §3(d), §3(e), §3(i)), Patents Rules 2003, and Drugs and Cosmetics Act 1940.
+  3. Precedents & Historical Prior Art: Discuss relevant case precedents (Turmeric US 5,401,504; Neem EP 0436257), classical Ayurvedic texts (Charaka, Sushruta, Ashtanga Hridaya), or TKDL access agreements.
+  4. Strategic Recommendations for Innovators: Detail actionable pathways (synergistic combination index, novel nano-formulation non-obviousness, NBA Form 3 approval).
+  5. Mandatory Disclaimer: Conclude with: "Disclaimer: This is statutory and regulatory information, not formal legal advice. Consult a registered patent attorney for filing."
 
-STATUTORY CONTEXT:
-{context}"""
-
-
-SYSTEM_PROMPT_HI = """आप AYUSH-IPR GUARDIAN हैं — भारतीय पारंपरिक चिकित्सा (AYUSH) और बौद्धिक संपदा कानून के सहायक AI कानूनी सलाहकार।
-
-महत्वपूर्ण: उपयोगकर्ता जिस भाषा में लिखे उसी भाषा में उत्तर दें। हिंदी में प्रश्न हो तो हिंदी में उत्तर दें।
-
-व्यवहार:
-- विनम्र, सहायक और स्पष्ट भाषा में उत्तर दें। अभिवादन का स्वागत करें।
-- प्रश्न का सीधा कानूनी उत्तर दें — केवल प्रासंगिक धाराएं बताएं।
-- कानूनी नज़ीरें (Precedents) स्पष्ट रखें:
-  * हल्दी (Turmeric) पेटेंट निरस्तीकरण: USPTO पेटेंट 5,401,504 (घाव भरना), जिसे 1997 में CSIR ने चरक संहिता और सुश्रुत संहिता के आधार पर रद्द कराया।
-  * दिव्या फार्मेसी मामला (2018): जैव विविधता अधिनियम, 2002 की धारा 7 और 21 (लाभ साझाकरण - ABS) से संबंधित है। इसका हल्दी पेटेंट से कोई संबंध नहीं है।
-  * नोवार्टिस मामला (2013): धारा 3(d) उपचारात्मक प्रभावकारिता (Therapeutic Efficacy) से संबंधित है।
-- अंतरराष्ट्रीय प्रश्न: PCT, पेरिस कन्वेंशन, धारा 39, TKDL समझौते।
-- पेटेंट योग्यता: धारा 3(j), 3(p), 3(e), 3(d) — जो प्रासंगिक हो।
-- निर्यात/लाइसेंसिंग: D&C Act 1940, शेड्यूल T, नियम 161B, NBA।
-- असंबंधित धाराएं जबरन न थोपें।
-- अनुवर्ती प्रश्नों में बातचीत को आगे बढ़ाएं, नए सिरे से न शुरू करें।
-- कानूनी धाराओं के नाम मूल रूप में रखें (Section 3(p), Patents Act 1970, PCT)।
-- अंत में: "अस्वीकरण: यह वैधानिक जानकारी है, औपचारिक कानूनी सलाह नहीं। पेटेंट अटॉर्नी से परामर्श करें।"
-- अप्रासंगिक प्रश्न: 1-2 वाक्यों में आयुष प्रश्न पूछने को कहें।
+ACCURACY RULES:
+1. Ground your analysis in the STATUTORY CONTEXT below.
+2. Cite every legal claim: [Section X, Act Name, Year] or [Rule X, Rules, Year].
+3. For patentability queries, always verify: §3(p) TK bar, §3(d) efficacy, §3(e) admixture, §3(h)/(i)/(j) method bars.
+4. For formulation classification: D&C Act Chapter IV-A + First Schedule.
+5. For manufacturing: Schedule T (GMP), Rules 151-170, Rule 161B (shelf-life).
 
 STATUTORY CONTEXT:
 {context}"""
 
 
-OUT_OF_DOMAIN_RESPONSE_HI = (
-    "यह प्रश्न पारंपरिक चिकित्सा (AYUSH) या बौद्धिक संपदा कानून के कार्यक्षेत्र से असंबंधित है।\n\n"
-    "AYUSH-IPR GUARDIAN पारंपरिक चिकित्सा, जड़ी-बूटियों, पेटेंट योग्यता (Patents Act 1970 की धारा 3(p), 3(j), 3(d), 3(e)), "
-    "TKDL पूर्व कला, NBA अनुमोदन, तथा औषधि एवं प्रसाधन सामग्री अधिनियम 1940 के लिए अधिकृत है।\n\n"
-    "कृपया आयुष सूत्रीकरण, जड़ी-बूटी पेटेंट या पारंपरिक ज्ञान से संबंधित प्रश्न पूछें।"
-)
+SYSTEM_PROMPT_HI = """आप AYUSH-IPR GUARDIAN हैं, जो भारतीय पारंपरिक चिकित्सा (AYUSH) और बौद्धिक संपदा कानून के आधिकारिक कानूनी और विनियामक सहायक हैं।
 
-OUT_OF_DOMAIN_RESPONSE_EN = (
-    "This inquiry appears outside the scope of AYUSH traditional medicine and intellectual property law.\n\n"
-    "AYUSH-IPR GUARDIAN is specialized in advising on traditional medicine, herbs, formulation patentability "
-    "(Patents Act 1970 Section 3(p) traditional knowledge, Section 3(j) plant exclusions, Section 3(d) efficacy, Section 3(e) synergy), "
-    "TKDL prior art, NBA approvals, and Drugs & Cosmetics Act compliance.\n\n"
-    "Please submit an inquiry pertaining to AYUSH formulation patentability, prior art, or regulatory compliance."
-)
+क्षेत्राधिकार एवं प्रासंगिकता नियम (Domain & Relevance Rules):
+- आप केवल और केवल भारतीय पारंपरिक चिकित्सा (AYUSH: आयुर्वेद, योग, यूनानी, सिद्धा, होम्योपैथी) और बौद्धिक संपदा कानून (पेटेंट अधिनियम 1970, जैव विविधता अधिनियम 2002, औषधि एवं प्रसाधन सामग्री अधिनियम 1940, TKDL) के आधिकारिक कानूनी सहायक हैं।
+- उपयोगकर्ता के वास्तविक प्रश्न को ध्यान से समझें और सीधे उसी का उत्तर दें। उपयोगकर्ता के प्रश्न को बदलकर कोई दूसरा नकली कानूनी प्रश्न कभी न बनाएं!
+- यदि उपयोगकर्ता का प्रश्न आयुष, पारंपरिक चिकित्सा, पेटेंट या कानूनी विनियामक के बाहर का है (जैसे: राजनीति, प्रधानमंत्री, खेल, मनोरंजन, सामान्य ज्ञान, कोडिंग आदि):
+  1. स्पष्ट रूप से बताएं कि यह प्रश्न आयुष (AYUSH) और पेटेंट कानून के कार्यक्षेत्र से बाहर (Irrelevant / Out-of-Scope) है।
+  2. यदि प्रश्न सामान्य ज्ञान का है (जैसे "PM kaun hai"), तो केवल 1 संक्षिप्त पंक्ति में सीधा और सही उत्तर दें (उदा. "भारत के वर्तमान प्रधानमंत्री श्री नरेंद्र मोदी हैं।")।
+  3. उपयोगकर्ता से कहें कि वे आयुष पारंपरिक ज्ञान, पेटेंट अधिनियम की धारा 3(p), 3(d), 3(e), TKDL या विनियामक अनुपालन से संबंधित प्रश्न पूछें।
+  4. अप्रासंगिक प्रश्नों के लिए पेटेंट कानूनी सलाह का 5-चरणीय प्रारूप (फॉर्मेट) कभी न बनाएं।
 
-OUT_OF_DOMAIN_PROMPT_HI = """आप AYUSH-IPR GUARDIAN हैं। 1-2 विनम्र वाक्यों में बताएं कि यह प्रश्न पारंपरिक चिकित्सा या पेटेंट कानून के दायरे से बाहर है, और उपयोगकर्ता को आयुष पेटेंट या विनियामक अनुपालन से संबंधित प्रश्न पूछने के लिए आमंत्रित करें।"""
+भाषा निर्देश:
+- उपयोगकर्ता ने हिंदी या हिंग्लिश में प्रश्न पूछा है। आपको अपना पूरा उत्तर अनिवार्य रूप से केवल और केवल शुद्ध हिंदी (देवनागरी लिपि) में ही देना है। कानूनी अधिनियमों और धाराओं के नाम (जैसे Section 3(p), Patents Act 1970) को छोड़कर बाकी पूरा विश्लेषण हिंदी में होना चाहिए।
 
-OUT_OF_DOMAIN_PROMPT_EN = """You are AYUSH-IPR GUARDIAN. In 1-2 polite sentences, explain that this inquiry is outside the scope of AYUSH traditional medicine and patent law, and invite the user to ask an AYUSH patent or regulatory question."""
+आयुष एवं पेटेंट कानूनी प्रश्नों के लिए संरचना:
+  1. मुख्य सारांश (Executive Summary): प्रश्न का सीधा और स्पष्ट कानूनी निष्कर्ष।
+  2. कानूनी धाराएं एवं विस्तृत विश्लेषण (Statutory Provisions & Analysis): पेटेंट अधिनियम 1970 की धारा 3(p) पारंपरिक ज्ञान अपवाद, धारा 3(d) प्रभावकारिता, धारा 3(e) मिश्रण निषेध, औषधि एवं प्रसाधन सामग्री अधिनियम 1940।
+  3. ऐतिहासिक पूर्व कला एवं उदाहरण (Case Precedents & TKDL): हल्दी पेटेंट (USPTO 5401504), नीम पेटेंट (EP 0436257), TKDL पारंपरिक ज्ञान संदर्भ।
+  4. नवप्रवर्तकों के लिए रणनीतिक सिफारिशें (Strategic Recommendations): तालमेल (Synergy) सिद्ध करने के तरीके, NBA फॉर्म 3 अनुमोदन।
+  5. अनिवार्य अस्वीकरण (Disclaimer): "अस्वीकरण: यह केवल वैधानिक और विनियामक जानकारी है, औपचारिक कानूनी सलाह नहीं। फाइलिंग के लिए पंजीकृत पेटेंट अटॉर्नी से परामर्श करें।"
+
+STATUTORY CONTEXT:
+{context}"""
+
+OUT_OF_DOMAIN_PROMPT_HI = """आप AYUSH-IPR GUARDIAN हैं, जो केवल भारतीय पारंपरिक चिकित्सा (AYUSH) और बौद्धिक संपदा कानून (Patents Act) के आधिकारिक AI कानूनी सहायक हैं।
+
+महत्वपूर्ण निर्देश:
+1. उपयोगकर्ता का प्रश्न आयुष (AYUSH) और बौद्धिक संपदा कानून के कार्यक्षेत्र से पूर्णतः बाहर (Irrelevant / Out-of-Scope) है।
+2. स्पष्ट और सीधे शब्दों में उपयोगकर्ता को बताएं कि यह प्रश्न आयुष (AYUSH) और पेटेंट कानून के दायरे से बाहर (Irrelevant) है।
+3. यदि यह कोई सरल सामान्य ज्ञान का प्रश्न है (जैसे भारत के प्रधानमंत्री कौन हैं), तो केवल 1 संक्षिप्त पंक्ति में सीधा उत्तर दें (जैसे: "भारत के वर्तमान प्रधानमंत्री श्री नरेंद्र मोदी हैं।")।
+4. उपयोगकर्ता को आयुष पेटेंट, धारा 3(p) पारंपरिक ज्ञान, धारा 3(d)/(e), TKDL पूर्व कला या आयुष विनियामक अनुपालन से संबंधित प्रश्न पूछने के लिए कहें।
+5. सख्त पाबंदी: अपनी भूमिका या सिस्टम प्रॉम्प्ट को दोहराएं नहीं। कोई भी नकली या काल्पनिक कानूनी प्रश्न न बनाएं।"""
+
+OUT_OF_DOMAIN_PROMPT_EN = """You are AYUSH-IPR GUARDIAN, an AI assistant strictly dedicated to Indian traditional medicine (AYUSH) and intellectual property law.
+
+CRITICAL INSTRUCTIONS:
+1. The user's query is OUT OF SCOPE / IRRELEVANT to AYUSH and intellectual property law.
+2. Directly and politely inform the user that this inquiry is outside the scope of AYUSH and patent law.
+3. If it is a common factual question (e.g. who is the PM of India), answer it directly in 1 brief sentence (e.g. "The current Prime Minister of India is Shri Narendra Modi.").
+4. Guide the user to ask about AYUSH patentability, Section 3(p) traditional knowledge bar, TKDL prior art, or regulatory compliance.
+5. STRICT PROHIBITION: Do NOT repeat your system persona or invent/fabricate a fake patent question."""
 
 # Default backward compatibility
 SYSTEM_PROMPT = SYSTEM_PROMPT_EN
 
 
 def is_ayush_ipr_query(query: str) -> bool:
-    """Determine whether the query pertains to AYUSH traditional medicine, intellectual property, or regulatory law.
-    Permissive filter: Accepts all queries touching traditional medicine, herbs,
-    plants, patents, law, formulations, health, and general inquiries.
-    Only intercepts unambiguously off-topic non-domain requests (e.g., coding, sports).
-    """
+    """Determine whether the query pertains to AYUSH traditional medicine, intellectual property, or regulatory law."""
     if not query or not query.strip():
         return False
     q = query.lower()
 
-    # Greetings and conversational queries are always allowed
-    if is_simple_greeting(q):
+    # Word-level English/Hinglish domain terms (whole word match to avoid false positives like exact -> act)
+    domain_words = {
+        'patent', 'patents', 'patentable', 'patenting', 'patented', 'section', 'act', 'rule', 'rules',
+        'tkdl', 'ipr', 'claim', 'claims', 'ayush', 'ayurveda', 'ayurvedic', 'unani', 'siddha',
+        'homeopathy', 'homeopathic', 'herb', 'herbal', 'herbs', 'botanical', 'botanicals',
+        'plant', 'plants', 'extract', 'extracts', 'formulation', 'formulations', 'medicine',
+        'medicinal', 'medicines', 'drug', 'drugs', 'cosmetic', 'cosmetics', 'schedule',
+        'nba', 'sbb', 'biodiversity', 'novelty', 'efficacy', 'synergy', 'admixture',
+        'traditional', 'knowledge', 'turmeric', 'neem', 'ashwagandha', 'tulsi', 'curcumin',
+        'gudmar', 'bhasma', 'churna', 'rasayana', 'kwath', 'taila', 'asava', 'arishta',
+        'vaidya', 'license', 'licensing', 'gmp', 'infringement', 'opposition', 'specification',
+        'bioenhancer', 'piperine', 'phytochemical', 'triphala', 'chyawanprash', 'haridra',
+        'guduchi', 'karela', 'maricha', 'dhara', 'dhaara', 'adhiniyam', 'petent', 'patant',
+        'aushadh', 'aushadhi', 'dawa', 'dawakhana', 'davai', 'jadi', 'buti', 'jadibuti',
+        'nuskha', 'shastra'
+    }
+
+    words = set(re.findall(r'[a-zA-Z]+', q))
+    if words.intersection(domain_words):
         return True
 
-    # High-confidence domain stems (matches partial words, typos, and Hinglish)
-    domain_stems = [
-        'patent', 'paten', 'patr', 'dhara', 'dhaara', 'adhiniyam', 'rule', 'act', 'sec', 'claim',
-        'tkdl', 'ipr', 'csir', 'nba', 'abs', 'wipo', 'ipo', 'uspto', 'epo',
-        'ayush', 'ayur', 'unani', 'siddha', 'homeo', 'homoeo', 'sowa',
-        'herb', 'plant', 'podh', 'paudh', 'flora', 'phyto', 'extract', 'formulat', 'composit',
-        'admix', 'synerg', 'novel', 'efficac', 'bioavail', 'bioenhanc', 'piperine',
-        'medicin', 'drug', 'dawa', 'davai', 'dawai', 'aushadh', 'jadi', 'buti', 'jadibut',
-        'tradition', 'knowledg', 'prior art', 'priorart', 'gmp', 'licen',
-        'ashwagandh', 'ashwagand', 'turmeric', 'haldi', 'neem', 'tulsi', 'curcumin', 'triphala', 'amla',
-        'guduchi', 'giloy', 'brahmi', 'shatavari', 'shilajit', 'guggul', 'chyawanprash',
-        'bhasma', 'churna', 'rasayana', 'kwath', 'taila', 'asava', 'arishta', 'vati', 'ghrita',
-        'charak', 'sushrut', 'samhita', 'nighantu', 'vaidya', 'hakim', 'nuskha',
-        '3(p)', '3(d)', '3(e)', '3(j)', '3(h)', '3(i)', '3p', '3d', '3e', '3j', 'section 3', 'section 25'
+    # Multi-word English phrases
+    domain_phrases = [
+        'prior art', 'traditional knowledge', 'who-gmp', 'form 3', 'section 3', 'sec 3',
+        'bio-enhancer', 'clinical trial'
     ]
-    if any(stem in q for stem in domain_stems):
+    if any(phrase in q for phrase in domain_phrases):
         return True
 
-    # Devanagari detection
-    for ch in query:
-        if '\u0900' <= ch <= '\u097f':
-            return True
-
-    # Explicitly off-topic triggers
-    blatant_offtopic = [
-        'write python', 'write java', 'write code', 'javascript code', 'c++ code', 'html code',
-        'cricket score', 'ipl match', 'football score', 'who is prime minister',
-        'who is president', 'weather today', 'movie ticket', 'bollywood news',
-        'crypto price', 'bitcoin price', 'stock market tip', 'recipe for cake', 'recipe for pizza'
+    # Devanagari keywords
+    devanagari_terms = [
+        'धारा', 'अधिनियम', 'पेटेंट', 'आयुष', 'आयुर्वेद', 'दवा', 'दवाई', 'औषधि', 'औषधीय',
+        'पारंपरिक', 'ज्ञान', 'हल्दी', 'नीम', 'तुलसी', 'जड़ी', 'बूटी', 'नुस्खा', 'फॉर्मूलेशन',
+        'जैव', 'विविधता', 'नियम', 'लाइसेंस', 'चरक', 'सुश्रुत', 'वाग्भट', 'चूर्ण', 'भस्म',
+        'क्वाथ', 'आसव', 'अरिष्ट'
     ]
-    if any(bot in q for bot in blatant_offtopic):
-        return False
-
-    # Default: allow query to proceed to RAG + LLM
-    return True
-
+    return any(term in query for term in devanagari_terms)
 
 
 def build_context_string(results: List[Dict]) -> str:
@@ -1198,8 +1082,7 @@ def build_context_string(results: List[Dict]) -> str:
     for i, r in enumerate(results, 1):
         citation = r.get("rag_config", {}).get("citation_format", r.get("doc_id", ""))
         title = r.get("title", "")
-        # Compact 1200-char window prevents context window overflow and mid-sentence truncation
-        content = r.get("content", "")[:1200]
+        content = r.get("content", "")[:3500]
         rerank = r.get("rerank_score", r.get("similarity_score", 0))
 
         context_parts.append(
@@ -1209,52 +1092,37 @@ def build_context_string(results: List[Dict]) -> str:
 
 
 def is_simple_greeting(query: str) -> bool:
-    """Detect simple greetings that don't need the full RAG pipeline."""
+    """Detect simple greetings/non-legal queries that don't need the full RAG pipeline."""
     q = query.strip().lower()
-    greetings = {
-        'hi', 'hello', 'hey', 'namaste', 'namaskar', 'pranam', 'halo',
-        'thanks', 'thank you', 'dhanyawad', 'shukriya',
-        'bye', 'goodbye', 'alvida', 'ok', 'okay', 'theek hai',
-        'good morning', 'good evening', 'good night', 'shubh prabhat',
-        'how are you', 'kaise ho', 'aap kaise hain',
-        'who are you', 'what are you', 'aap kaun hain', 'tum kaun ho',
-        'what can you do', 'aap kya kar sakte hain'
-    }
-    return q in greetings
+    greetings = ['hi', 'hello', 'hey', 'thanks', 'thank you', 'bye', 'ok', 'okay',
+                 'good morning', 'good evening', 'good night', 'namaste', 'namaskar',
+                 'how are you', 'what are you', 'who are you', 'what can you do']
+    return q in greetings or len(q) < 5
 
 
 def estimate_max_tokens(query: str) -> int:
-    """Adaptive token budget based on query complexity."""
+    """Generous token budget — ensures comprehensive legal analysis is never truncated."""
     q = query.strip().lower()
     if is_simple_greeting(q):
         return 120
-    words = q.split()
-    # Short factual questions ("what is section 3p?", "shelf life of churna?")
-    if len(words) <= 8:
-        return 600
-    # Medium analysis questions
-    if len(words) <= 20:
-        return 900
-    # Comprehensive/complex queries
-    return 1200
+    # Comprehensive token budget for in-depth legal analysis
+    return 1024
 
 
-def rag_query(query: str, rag_db: RAGDatabase, llm: LLMManager, language: Optional[str] = None, history: Optional[List[Dict]] = None) -> dict:
+def rag_query(query: str, rag_db: RAGDatabase, llm: LLMManager, language: Optional[str] = None) -> dict:
     """Full RAG pipeline: hybrid search → cross-encoder rerank → comprehensive generate → cite."""
     t0 = time.time()
     is_hi = language == "hi" or is_hindi_query(query)
-    history_list = history or []
 
     # Shortcut for greetings — skip RAG entirely
-    if is_simple_greeting(query) and len(history_list) <= 1:
+    if is_simple_greeting(query):
         t1 = time.time()
         greet_prompt = "आप AYUSH-IPR GUARDIAN हैं। संक्षिप्त और विनम्र हिंदी में उत्तर दें।" if is_hi else "You are AYUSH-IPR GUARDIAN, an AI assistant for Indian traditional medicine IPR law. Respond briefly and warmly in the user's language."
         answer = llm.generate(
             greet_prompt,
             query,
             max_tokens=100,
-            is_hindi=is_hi,
-            history=history_list
+            is_hindi=is_hi
         )
         gen_time = time.time() - t1
         return {
@@ -1267,72 +1135,41 @@ def rag_query(query: str, rag_db: RAGDatabase, llm: LLMManager, language: Option
             }
         }
 
-    # Out-of-Domain Guardrail: Reject ALL non-AYUSH / non-legal questions immediately
-    if not is_ayush_ipr_query(query) and len(history_list) <= 1:
-        ood_ans = OUT_OF_DOMAIN_RESPONSE_HI if is_hi else OUT_OF_DOMAIN_RESPONSE_EN
+    # Out-of-Domain Guardrail: General queries not related to AYUSH or IPR
+    if not is_ayush_ipr_query(query):
+        t1 = time.time()
+        ood_prompt = OUT_OF_DOMAIN_PROMPT_HI if is_hi else OUT_OF_DOMAIN_PROMPT_EN
+        answer = llm.generate(ood_prompt, query, max_tokens=250, is_hindi=is_hi, is_out_of_domain=True)
+        gen_time = time.time() - t1
         return {
-            "query": query, "answer": ood_ans, "citations": [], "sources": [],
+            "query": query, "answer": answer, "citations": [], "sources": [],
             "metadata": {
                 "model": llm.model_name, "engine": getattr(llm, 'engine_type', 'fp16'),
-                "search_time_ms": 0, "generation_time_ms": 0,
-                "total_time_ms": 0, "sources_used": 0,
-                "retrieval_method": "none (out of domain - rejected)",
+                "search_time_ms": 0, "generation_time_ms": round(gen_time * 1000),
+                "total_time_ms": round(gen_time * 1000), "sources_used": 0,
+                "retrieval_method": "none (out of domain)",
             }
         }
 
-    q_clean = query.strip().lower()
-    words = q_clean.split()
-    is_translation = (
-        len(words) <= 6 and
-        any(w in q_clean for w in ['hindi', 'translate', 'translation', 'english', 'अनुवाद', 'हिंदी', 'अंग्रेजी']) and
-        (len(history_list) > 0)
-    )
+    # Step 1: Hybrid search → rerank (top-6 for rich statutory context)
+    results = rag_db.hybrid_search(query, top_k=6)
+    search_time = time.time() - t0
 
-    if is_translation:
-        target_lang = "hi" if (any(w in q_clean for w in ['hindi', 'हिंदी']) or language == "hi") else "en"
-        is_hi = (target_lang == "hi")
-        results = []
-        search_time = 0
-        max_tok = estimate_max_tokens(query)
-        t1 = time.time()
-        answer = llm.generate("", query, max_tokens=max_tok, is_hindi=is_hi, history=history_list, is_translation=True, target_lang=target_lang)
-        gen_time = time.time() - t1
-    else:
-        last_user_query = ""
-        for m in reversed(history_list):
-            if m.get("role") == "user" and m.get("content") != query:
-                last_user_query = m.get("content", "")
-                break
+    # Filter empty results
+    results = [r for r in results if len(r.get('content', '')) > 50]
+    if not results:
+        results = rag_db.hybrid_search(query, top_k=6)
 
-        is_followup = (
-            len(words) <= 6 and
-            any(w in q_clean for w in ['aur', 'more', 'detail', 'batao', 'point', 'kyu', 'kaise', 'english', 'bataiye', 'explain', 'samjhao', 'continue']) and
-            (last_user_query != "")
-        )
+    # Step 2: Build rich context
+    context = build_context_string(results)
 
-        search_query = query
-        if is_followup and last_user_query:
-            search_query = f"{last_user_query} {query}"
-
-        # Step 1: Hybrid search → rerank (top-6 for rich statutory context)
-        results = rag_db.hybrid_search(search_query, top_k=6)
-        search_time = time.time() - t0
-
-        # Filter empty results
-        results = [r for r in results if len(r.get('content', '')) > 50]
-        if not results:
-            results = rag_db.hybrid_search(search_query, top_k=6)
-
-        # Step 2: Build rich context
-        context = build_context_string(results)
-
-        # Step 3: Full token budget + generate
-        max_tok = estimate_max_tokens(query)
-        t1 = time.time()
-        sys_prompt = SYSTEM_PROMPT_HI if is_hi else SYSTEM_PROMPT_EN
-        prompt = sys_prompt.format(context=context)
-        answer = llm.generate(prompt, query, max_tokens=max_tok, is_hindi=is_hi, history=history_list)
-        gen_time = time.time() - t1
+    # Step 3: Full token budget + generate
+    max_tok = estimate_max_tokens(query)
+    t1 = time.time()
+    sys_prompt = SYSTEM_PROMPT_HI if is_hi else SYSTEM_PROMPT_EN
+    prompt = sys_prompt.format(context=context)
+    answer = llm.generate(prompt, query, max_tokens=max_tok, is_hindi=is_hi)
+    gen_time = time.time() - t1
 
     # Step 4: Extract citations
     citations = re.findall(r'\[([^\]]+)\]', answer)
@@ -1377,68 +1214,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.middleware("http")
-async def add_cors_headers_always(request, call_next):
-    if request.method == "OPTIONS":
-        response = Response(status_code=204)
-    else:
-        try:
-            response = await call_next(request)
-        except Exception as exc:
-            import traceback
-            traceback.print_exc()
-            response = JSONResponse(
-                status_code=500,
-                content={"error": str(exc), "detail": "Internal server error"}
-            )
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "*"
-    response.headers["Access-Control-Allow-Headers"] = "*"
-    response.headers["Access-Control-Expose-Headers"] = "*"
-    return response
-
 # Global instances
 rag_db = RAGDatabase()
 llm = LLMManager()
 asr = ASRManager()
 tts = OmniVoiceTTSManager()
 server_start_time = datetime.now().isoformat()
-models_ready = False  # Set True once LLM + RAG are loaded (chat-ready)
-current_boot_step = "initializing"
-current_boot_step_display = "Server started. Initializing Cloudflare tunnel..."
-
-# ─── Rate Limiting ────────────────────────────────────────────
-from collections import defaultdict
-_rate_limit_store = defaultdict(list)  # IP -> [timestamps]
-MAX_REQUESTS_PER_MINUTE = 12
-MAX_QUERY_LENGTH = 2000
-MAX_HISTORY_TURNS = 10
-SERVER_TTL_MINUTES = 60  # Auto-shutdown after 1 hour
-_last_request_time = time.time()  # Track last activity for auto-shutdown
-
-def _check_rate_limit(client_ip: str) -> bool:
-    """Returns True if request is allowed, False if rate limited."""
-    global _last_request_time
-    _last_request_time = time.time()
-    now = time.time()
-    # Clean old entries
-    _rate_limit_store[client_ip] = [t for t in _rate_limit_store[client_ip] if now - t < 60]
-    if len(_rate_limit_store[client_ip]) >= MAX_REQUESTS_PER_MINUTE:
-        return False
-    _rate_limit_store[client_ip].append(now)
-    return True
-
-
-class ChatMessage(BaseModel):
-    role: str
-    content: str
 
 
 class ChatRequest(BaseModel):
     query: str
     top_k: int = 5
     language: Optional[str] = None
-    messages: Optional[List[ChatMessage]] = None
 
 
 class ClassifyRequest(BaseModel):
@@ -1448,7 +1235,7 @@ class ClassifyRequest(BaseModel):
 
 @app.get("/api/health")
 async def health():
-    """Health check with VRAM report and readiness status."""
+    """Health check with VRAM report."""
     gpu_info = {}
     if torch.cuda.is_available():
         for i in range(torch.cuda.device_count()):
@@ -1462,10 +1249,7 @@ async def health():
             }
 
     return {
-        "status": "healthy" if models_ready else "loading",
-        "ready": models_ready,
-        "step": current_boot_step,
-        "step_display": current_boot_step_display,
+        "status": "healthy",
         "models": {
             "llm": {"loaded": llm.loaded, "name": llm.model_name},
             "embeddings": {"loaded": rag_db.embed_model is not None},
@@ -1479,88 +1263,31 @@ async def health():
     }
 
 
-@app.post("/api/shutdown")
-async def shutdown():
-    """Gracefully terminate Kaggle server worker and mark Gist offline."""
-    print("  [SHUTDOWN] Client requested server termination. Shutting down worker...", flush=True)
-    def _do_exit():
-        time.sleep(1.0)
-        try:
-            _registry_mark_offline()
-        except Exception:
-            pass
-        os._exit(0)
-    threading.Thread(target=_do_exit, daemon=True).start()
-    return {"status": "shutting_down", "message": "Kaggle server worker is terminating."}
-
-
 @app.post("/api/chat")
-async def chat(req: ChatRequest, request: "starlette.requests.Request" = None):
-    """Main RAG chat endpoint with multi-turn context support."""
-    from starlette.requests import Request as _Req
-    # Rate limiting
-    client_ip = "unknown"
-    try:
-        client_ip = request.client.host if request else "unknown"
-    except Exception:
-        pass
-    if not _check_rate_limit(client_ip):
-        raise HTTPException(429, "Rate limit exceeded. Please wait a moment.")
+async def chat(req: ChatRequest):
+    """Main RAG chat endpoint."""
+    if not llm.loaded or not rag_db.loaded:
+        raise HTTPException(500, "Models not fully loaded")
 
-    if not models_ready:
-        raise HTTPException(503, "Server is starting up. Models are loading, please retry in a moment.")
-
-    # Input validation
-    if not req.query or not req.query.strip():
-        raise HTTPException(400, "Query cannot be empty.")
-    if len(req.query) > MAX_QUERY_LENGTH:
-        raise HTTPException(400, f"Query too long. Maximum {MAX_QUERY_LENGTH} characters.")
-
-    history_dicts = []
-    if req.messages:
-        for m in req.messages[-MAX_HISTORY_TURNS:]:
-            history_dicts.append({"role": m.role, "content": m.content})
-
-    result = rag_query(req.query, rag_db, llm, language=req.language, history=history_dicts)
+    result = rag_query(req.query, rag_db, llm, language=req.language)
     return result
 
 
 @app.post("/api/chat/stream")
-async def chat_stream(req: ChatRequest, request: "starlette.requests.Request" = None):
-    """Streaming RAG chat endpoint — SSE (Server-Sent Events) with multi-turn context retention.
+async def chat_stream(req: ChatRequest):
+    """Streaming RAG chat endpoint — SSE (Server-Sent Events).
     Streams tokens as they're generated for real-time display in the app.
     """
     from transformers import TextIteratorStreamer
     import threading
 
-    # Rate limiting
-    client_ip = "unknown"
-    try:
-        client_ip = request.client.host if request else "unknown"
-    except Exception:
-        pass
-    if not _check_rate_limit(client_ip):
-        raise HTTPException(429, "Rate limit exceeded. Please wait a moment.")
-
-    if not models_ready:
-        raise HTTPException(503, "Server is starting up. Models are loading, please retry in a moment.")
-
-    # Input validation
-    if not req.query or not req.query.strip():
-        raise HTTPException(400, "Query cannot be empty.")
-    if len(req.query) > MAX_QUERY_LENGTH:
-        raise HTTPException(400, f"Query too long. Maximum {MAX_QUERY_LENGTH} characters.")
+    if not llm.loaded or not rag_db.loaded:
+        raise HTTPException(500, "Models not fully loaded")
 
     is_hi = req.language == "hi" or is_hindi_query(req.query)
 
-    # Extract history if provided
-    history_dicts = []
-    if req.messages:
-        for m in req.messages:
-            history_dicts.append({"role": m.role, "content": m.content})
-
-    # Shortcut for greetings — stream instant friendly greeting ONLY if no conversation history exists
-    if is_simple_greeting(req.query) and len(history_dicts) <= 1:
+    # Shortcut for greetings — stream instant friendly greeting
+    if is_simple_greeting(req.query):
         def stream_greeting():
             import json as _json
             import time as _time
@@ -1569,24 +1296,22 @@ async def chat_stream(req: ChatRequest, request: "starlette.requests.Request" = 
                     "नमस्ते! मैं **AYUSH-IPR GUARDIAN** हूँ, भारतीय पारंपरिक चिकित्सा (आयुर्वेद, सिद्ध, यूनानी, होम्योपैथी) "
                     "और बौद्धिक संपदा कानून के लिए आपका आधिकारिक AI कानूनी सहायक।\n\n"
                     "मैं आपकी सहायता कर सकता हूँ:\n"
-                    "- **पेटेंट योग्यता मूल्यांकन** (पेटेंट अधिनियम, 1970: धारा 3(p) पारंपरिक ज्ञान बार, धारा 3(j) पौधे, धारा 3(d), धारा 3(e))\n"
+                    "- **पेटेंट योग्यता मूल्यांकन** (पेटेंट अधिनियम, 1970: धारा 3(p) पारंपरिक ज्ञान बार, धारा 3(d), धारा 3(e))\n"
                     "- **फॉर्मूलेशन विनियामक वर्गीकरण** (शास्त्रीय बनाम पेटेंट/मालिकाना औषधियां)\n"
                     "- **शेड्यूल T (GMP) एवं नियम 161B अनुपालन**\n"
-                    "- **TKDL पूर्व कला एवं धारा 25 पेटेंट विरोध**\n"
-                    "- **अंतरराष्ट्रीय पेटेंट एवं PCT फाइलिंग** (धारा 39 विदेशी फाइलिंग लाइसेंस)\n\n"
-                    "आज आप किस पारंपरिक फॉर्मूलेशन, जड़ी-बूटी या कानूनी प्रावधान की जांच करना चाहते हैं?"
+                    "- **TKDL पूर्व कला एवं धारा 25 पेटेंट विरोध**\n\n"
+                    "आज आप किस पारंपरिक फॉर्मूलेशन या कानूनी प्रावधान की जांच करना चाहते हैं?"
                 )
             else:
                 greeting_ans = (
                     "Hello! I am **AYUSH-IPR GUARDIAN**, your specialized legal AI assistant for Indian Traditional Medicine "
                     "(Ayurveda, Siddha, Unani, Homeopathy) and Intellectual Property Law.\n\n"
                     "I can assist you with:\n"
-                    "- **Patentability Assessments** under Patents Act, 1970 (§3(p) TK bar, §3(j) plants, §3(d) efficacy, §3(e) admixtures)\n"
+                    "- **Patentability Assessments** under Patents Act, 1970 (§3(p) TK bar, §3(d) efficacy, §3(e) admixtures)\n"
                     "- **Formulation Regulatory Classification** (Classical vs Patent/Proprietary under D&C Act First Schedule)\n"
                     "- **Schedule T (GMP) & Rule 161B Shelf-life Compliance**\n"
-                    "- **TKDL Prior Art & Section 25 Pre-grant / Post-grant Oppositions**\n"
-                    "- **International Patents & PCT Guidance** (§39 Foreign Filing License)\n\n"
-                    "What traditional formulation, herb, or legal provision would you like to examine today?"
+                    "- **TKDL Prior Art & Section 25 Pre-grant / Post-grant Oppositions**\n\n"
+                    "What traditional formulation or legal provision would you like to examine today?"
                 )
             yield f"data: {_json.dumps({'type': 'sources', 'sources': [], 'search_time_ms': 0})}\n\n"
             words = greeting_ans.split(" ")
@@ -1595,77 +1320,48 @@ async def chat_stream(req: ChatRequest, request: "starlette.requests.Request" = 
                 yield f"data: {_json.dumps({'type': 'token', 'token': w + ' '})}\n\n"
             yield f"data: {_json.dumps({'type': 'done'})}\n\n"
 
-        return StreamingResponse(stream_greeting(), media_type="text/event-stream")
+    # Out-of-Domain Guardrail: Handle non-AYUSH / non-legal questions immediately
+    if not is_ayush_ipr_query(req.query):
+        ood_prompt = OUT_OF_DOMAIN_PROMPT_HI if is_hi else OUT_OF_DOMAIN_PROMPT_EN
+        inputs = llm.prepare_inputs(ood_prompt, req.query, is_hindi=is_hi, is_out_of_domain=True)
+        streamer = TextIteratorStreamer(llm.tokenizer, skip_prompt=True, skip_special_tokens=True)
+        gen_kwargs = {
+            **{k: v for k, v in inputs.items()},
+            "max_new_tokens": 250,
+            "temperature": 0.3,
+            "top_p": 0.9,
+            "repetition_penalty": 1.05,
+            "do_sample": True,
+            "use_cache": True,
+            "streamer": streamer,
+        }
+        gen_thread = threading.Thread(target=llm.model.generate, kwargs=gen_kwargs)
+        gen_thread.start()
 
-    # Out-of-Domain Guardrail: Intercept strictly off-topic questions
-    if not is_ayush_ipr_query(req.query) and len(history_dicts) <= 1:
-        def stream_out_of_domain():
+        def generate_sse_ood():
             import json as _json
-            import time as _time
-            ood_ans = OUT_OF_DOMAIN_RESPONSE_HI if is_hi else OUT_OF_DOMAIN_RESPONSE_EN
             yield f"data: {_json.dumps({'type': 'sources', 'sources': [], 'search_time_ms': 0})}\n\n"
-            words = ood_ans.split(" ")
-            for w in words:
-                _time.sleep(0.015)
-                yield f"data: {_json.dumps({'type': 'token', 'token': w + ' '})}\n\n"
+            for text in streamer:
+                if text:
+                    yield f"data: {_json.dumps({'type': 'token', 'token': text})}\n\n"
             yield f"data: {_json.dumps({'type': 'done'})}\n\n"
 
-        return StreamingResponse(stream_out_of_domain(), media_type="text/event-stream")
+        return StreamingResponse(generate_sse_ood(), media_type="text/event-stream")
 
-    # Follow-up context enrichment: if user says "in hindi", "translate", "tell me more"
-    q_clean = req.query.strip().lower()
-    words = q_clean.split()
-    is_translation = (
-        len(words) <= 6 and
-        any(w in q_clean for w in ['hindi', 'translate', 'translation', 'english', 'अनुवाद', 'हिंदी', 'अंग्रेजी']) and
-        (len(history_dicts) > 0)
-    )
+    # Step 1: Hybrid search + rerank (top-6 rich context)
+    t0 = time.time()
+    results = rag_db.hybrid_search(req.query, top_k=6)
+    results = [r for r in results if len(r.get('content', '')) > 50]
+    if not results:
+        results = rag_db.hybrid_search(req.query, top_k=6)
+    search_time = time.time() - t0
+    context = build_context_string(results)
 
-    if is_translation:
-        target_lang = "hi" if (any(w in q_clean for w in ['hindi', 'हिंदी']) or req.language == "hi") else "en"
-        is_hi = (target_lang == "hi")
-        results = []
-        search_time = 0
-        inputs = llm.prepare_inputs(
-            "",
-            req.query,
-            is_hindi=is_hi,
-            history=history_dicts,
-            is_translation=True,
-            target_lang=target_lang
-        )
-    else:
-        last_user_query = ""
-        for m in reversed(history_dicts):
-            if m.get("role") == "user" and m.get("content") != req.query:
-                last_user_query = m.get("content", "")
-                break
-
-        is_followup = (
-            len(words) <= 6 and
-            any(w in q_clean for w in ['aur', 'more', 'detail', 'batao', 'point', 'kyu', 'kaise', 'english', 'bataiye', 'explain', 'samjhao', 'continue']) and
-            (last_user_query != "")
-        )
-
-        search_query = req.query
-        if is_followup and last_user_query:
-            search_query = f"{last_user_query} {req.query}"
-
-        # Step 1: Hybrid search + rerank (top-6 rich context)
-        t0 = time.time()
-        results = rag_db.hybrid_search(search_query, top_k=6)
-        results = [r for r in results if len(r.get('content', '')) > 50]
-        if not results:
-            results = rag_db.hybrid_search(search_query, top_k=6)
-        search_time = time.time() - t0
-        context = build_context_string(results)
-
-        # Step 2: Prepare prompt + token budget
-        sys_prompt = SYSTEM_PROMPT_HI if is_hi else SYSTEM_PROMPT_EN
-        prompt = sys_prompt.format(context=context)
-        inputs = llm.prepare_inputs(prompt, req.query, is_hindi=is_hi, history=history_dicts)
-
+    # Step 2: Prepare prompt + token budget
     max_tok = estimate_max_tokens(req.query)
+    sys_prompt = SYSTEM_PROMPT_HI if is_hi else SYSTEM_PROMPT_EN
+    prompt = sys_prompt.format(context=context)
+    inputs = llm.prepare_inputs(prompt, req.query, is_hindi=is_hi)
 
     # Step 3: Stream tokens via TextIteratorStreamer
     streamer = TextIteratorStreamer(llm.tokenizer, skip_prompt=True, skip_special_tokens=True)
@@ -1673,10 +1369,9 @@ async def chat_stream(req: ChatRequest, request: "starlette.requests.Request" = 
     gen_kwargs = {
         **{k: v for k, v in inputs.items()},
         "max_new_tokens": max_tok,
-        "temperature": 0.55,
-        "top_p": 0.90,
-        "top_k": 50,
-        "repetition_penalty": 1.08,
+        "temperature": 0.35,
+        "top_p": 0.92,
+        "repetition_penalty": 1.05,
         "do_sample": True,
         "use_cache": True,
         "streamer": streamer,
@@ -1708,80 +1403,6 @@ async def chat_stream(req: ChatRequest, request: "starlette.requests.Request" = 
         yield f"data: {_json.dumps({'type': 'done'})}\n\n"
 
     return StreamingResponse(generate_sse(), media_type="text/event-stream")
-
-
-@app.post("/api/document/extract")
-async def extract_document(file: UploadFile = File(...)):
-    """Extract text from uploaded PDF, Image, DOCX, or TXT."""
-    filename = file.filename or "uploaded_document"
-    contents = await file.read()
-
-    extracted_text = ""
-    file_type = "unknown"
-    num_pages = 1
-
-    # 1. PDF Extraction
-    if filename.lower().endswith(".pdf") or (file.content_type and "pdf" in file.content_type.lower()):
-        file_type = "pdf"
-        try:
-            import io
-            import pypdf
-            reader = pypdf.PdfReader(io.BytesIO(contents))
-            num_pages = len(reader.pages)
-            pages_text = []
-            total_chars = 0
-            for idx, page in enumerate(reader.pages[:15]):
-                txt = page.extract_text() or ""
-                if txt.strip():
-                    pages_text.append(f"--- Page {idx+1} ---\n{txt.strip()}")
-                    total_chars += len(txt)
-                    if total_chars > 12000:
-                        break
-            extracted_text = "\n\n".join(pages_text)
-        except Exception as e:
-            try:
-                from pdfminer.high_level import extract_text as pdf_extract
-                import io
-                extracted_text = pdf_extract(io.BytesIO(contents))[:12000]
-            except Exception as e2:
-                extracted_text = f"Error extracting PDF: {e} | {e2}"
-
-    # 2. Image OCR Extraction
-    elif any(filename.lower().endswith(ext) for ext in [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"]) or (file.content_type and "image" in file.content_type.lower()):
-        file_type = "image"
-        try:
-            import io
-            from PIL import Image
-            img = Image.open(io.BytesIO(contents))
-            try:
-                import pytesseract
-                extracted_text = pytesseract.image_to_string(img).strip()
-            except Exception:
-                extracted_text = f"[Image: {filename}, dimensions: {img.width}x{img.height}, format: {img.format}]"
-        except Exception as e:
-            extracted_text = f"Error reading image: {e}"
-
-    # 3. Plain text / Markdown
-    elif filename.lower().endswith((".txt", ".md", ".csv", ".json")):
-        file_type = "text"
-        try:
-            extracted_text = contents.decode("utf-8", errors="ignore")[:12000]
-        except Exception as e:
-            extracted_text = f"Error reading text: {e}"
-
-    else:
-        try:
-            extracted_text = contents.decode("utf-8", errors="ignore")[:6000]
-        except Exception:
-            extracted_text = f"[Binary file {filename}, size: {len(contents)} bytes]"
-
-    return {
-        "filename": filename,
-        "file_type": file_type,
-        "num_pages": num_pages,
-        "char_count": len(extracted_text),
-        "text": extracted_text[:12000]
-    }
 
 
 @app.post("/api/classify")
@@ -1868,21 +1489,6 @@ async def vram():
     return gpu_info
 
 
-@app.post("/api/shutdown")
-async def shutdown_endpoint():
-    """Programmatic shutdown endpoint to conserve GPU quota when done."""
-    def kill_worker():
-        time.sleep(1)
-        try:
-            _registry_mark_offline()
-        except Exception:
-            pass
-        os._exit(0)
-    threading.Thread(target=kill_worker, daemon=True).start()
-    return {"status": "shutting_down", "message": "Server instance terminating"}
-
-
-
 # ============================================================
 # CELL 9: TUNNEL SETUP
 # ============================================================
@@ -1906,16 +1512,43 @@ def broadcast_tunnel_url(url: str):
         pass
 
 
-def start_cloudflared_tunnel(port: int) -> str:
-    """Start Cloudflare Tunnel (trycloudflare.com) and return public HTTPS URL."""
-    print("\n  Starting Cloudflare Tunnel (cloudflared)...", flush=True)
-
-    cloudflared_bin = "/usr/local/bin/cloudflared"
-    if not os.path.exists(cloudflared_bin):
-        os.system("curl -sL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared && chmod +x /usr/local/bin/cloudflared")
+def start_localtunnel(port: int) -> str:
+    """Start localtunnel and return public HTTPS URL."""
+    print("\n  Starting localtunnel...", flush=True)
 
     proc = subprocess.Popen(
-        [cloudflared_bin, "tunnel", "--url", f"http://localhost:{port}"],
+        ["lt", "--port", str(port)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    for _ in range(30):
+        line = proc.stdout.readline()
+        if "url" in line.lower() or "https://" in line:
+            match = re.search(r"(https://[^\s]+)", line)
+            if match:
+                url = match.group(1)
+                for _ in range(3):
+                    print(f"\n{'=' * 60}", flush=True)
+                    print(f"  TUNNEL URL: {url}", flush=True)
+                    print(f"{'=' * 60}\n", flush=True)
+                print(f"  Health: {url}/api/health", flush=True)
+                print(f"  Chat:   POST {url}/api/chat", flush=True)
+                broadcast_tunnel_url(url)
+                return url
+        time.sleep(1)
+
+    print("  ✗ localtunnel failed. Trying cloudflared fallback...", flush=True)
+    return start_cloudflared_fallback(port)
+
+
+def start_cloudflared_fallback(port: int) -> str:
+    """Fallback: cloudflared tunnel."""
+    if not os.path.exists("/usr/local/bin/cloudflared"):
+        os.system("wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -O /usr/local/bin/cloudflared && chmod +x /usr/local/bin/cloudflared")
+
+    proc = subprocess.Popen(
+        ["/usr/local/bin/cloudflared", "tunnel", "--url", f"http://localhost:{port}"],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -1937,16 +1570,9 @@ def start_cloudflared_tunnel(port: int) -> str:
                 url = match.group(1)
                 for _ in range(3):
                     print(f"\n{'=' * 60}", flush=True)
-                    print(f"  CLOUDFLARE TUNNEL URL: {url}", flush=True)
+                    print(f"  TUNNEL URL: {url}", flush=True)
                     print(f"{'=' * 60}\n", flush=True)
-                print(f"  Health: {url}/api/health", flush=True)
-                print(f"  Chat:   POST {url}/api/chat", flush=True)
                 broadcast_tunnel_url(url)
-                # Immediately push early booting URL to Gist registry so clients discover it in seconds!
-                try:
-                    _registry_push_url(url, status="booting")
-                except Exception as e:
-                    print(f"  [DISCOVERY] Early Gist push note: {e}", flush=True)
                 return url
         except queue.Empty:
             continue
@@ -2073,108 +1699,15 @@ def run_tests():
 
 
 # ============================================================
-# CELL 11: MAIN ENTRY POINT (OPTIMIZED FOR FAST STARTUP)
+# CELL 11: MAIN ENTRY POINT
 # ============================================================
 
-def _auto_shutdown_watchdog():
-    """Auto-shutdown after SERVER_TTL_MINUTES of inactivity.
-    Resets on each request (tracked via _last_request_time)."""
-    global _last_request_time
-    print(f"  [WATCHDOG] Auto-shutdown watchdog started ({SERVER_TTL_MINUTES}min inactivity timeout)", flush=True)
-    while True:
-        time.sleep(60)  # Check every minute
-        idle_minutes = (time.time() - _last_request_time) / 60
-        if idle_minutes >= SERVER_TTL_MINUTES:
-            print(f"\n{'=' * 60}", flush=True)
-            print(f"  [WATCHDOG] Server idle for {idle_minutes:.0f} minutes. Shutting down.", flush=True)
-            print(f"{'=' * 60}", flush=True)
-            # Mark offline in registry
-            try:
-                _registry_mark_offline()
-            except Exception as e:
-                print(f"  [WATCHDOG] Registry mark offline failed: {e}", flush=True)
-            os._exit(0)  # Force exit
-
-
-def _registry_push_url(url, status="running"):
-    """Push URL to GitHub Gist registry."""
-    try:
-        import urllib.request as _ur
-        GIST_ID = "7873aa6da8f97b2b817137dd4f2df5be"
-        token = os.environ.get("GITHUB_TOKEN", "")
-        if not token:
-            try:
-                from kaggle_secrets import UserSecretsClient
-                token = UserSecretsClient().get_secret("GITHUB_TOKEN")
-            except Exception:
-                pass
-        if not token:
-            print("  [REGISTRY] GITHUB_TOKEN not available, skipping Gist push", flush=True)
-            return
-        now = datetime.now().isoformat() + "Z"
-        from datetime import timedelta as _td
-        expires = (datetime.now() + _td(minutes=SERVER_TTL_MINUTES)).isoformat() + "Z"
-        data = json.dumps({"files": {"server_registry.json": {"content": json.dumps({
-            "server_url": url, "status": status,
-            "started_at": now, "expires_at": expires,
-            "last_heartbeat": now,
-            "kaggle_kernel": "vanshseth003/ayush-ipr-guardian"
-        }, indent=2)}}}).encode("utf-8")
-        req = _ur.Request(f"https://api.github.com/gists/{GIST_ID}", data=data, method="PATCH",
-                          headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json", "User-Agent": "AYUSH-IPR"})
-        with _ur.urlopen(req, timeout=10) as resp:
-            if resp.status == 200:
-                print(f"  [REGISTRY] ✓ Pushed URL to Gist: {url} ({status})", flush=True)
-    except Exception as e:
-        print(f"  [REGISTRY] Gist push failed: {e}", flush=True)
-
-
-def _registry_mark_offline():
-    """Mark server as offline in Gist."""
-    try:
-        import urllib.request as _ur
-        GIST_ID = "7873aa6da8f97b2b817137dd4f2df5be"
-        token = os.environ.get("GITHUB_TOKEN", "")
-        if not token:
-            try:
-                from kaggle_secrets import UserSecretsClient
-                token = UserSecretsClient().get_secret("GITHUB_TOKEN")
-            except Exception:
-                pass
-        if not token:
-            return
-        data = json.dumps({"files": {"server_registry.json": {"content": json.dumps({
-            "server_url": "", "status": "offline",
-            "started_at": "", "expires_at": "",
-            "last_heartbeat": datetime.now().isoformat() + "Z",
-            "kaggle_kernel": "vanshseth003/ayush-ipr-guardian"
-        }, indent=2)}}}).encode("utf-8")
-        req = _ur.Request(f"https://api.github.com/gists/{GIST_ID}", data=data, method="PATCH",
-                          headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json", "User-Agent": "AYUSH-IPR"})
-        with _ur.urlopen(req, timeout=10) as resp:
-            if resp.status == 200:
-                print("  [REGISTRY] ✓ Marked offline", flush=True)
-    except Exception as e:
-        print(f"  [REGISTRY] Mark offline failed: {e}", flush=True)
-
-
-def _registry_heartbeat_loop(url):
-    """Send heartbeat to Gist every 5 minutes."""
-    while True:
-        time.sleep(300)  # 5 minutes
-        try:
-            _registry_push_url(url, status="running")
-        except Exception:
-            pass
-
-
 def main():
-    global models_ready, _last_request_time
     PORT = 8000
-    _last_request_time = time.time()
 
     print("\n" + "=" * 60)
-    print("  AYUSH-IPR GUARDIAN — Kaggle RAG Server (Fast Start)")
+    print("  AYUSH-IPR GUARDIAN — Kaggle RAG Server")
+    print("  Starting up on T4 x2...")
     print("=" * 60 + "\n", flush=True)
 
     # ── Initial VRAM report ──
@@ -2184,10 +1717,10 @@ def main():
 
     # ── Determine GPU placement ──
     if num_gpus >= 2:
-        llm_gpu = "cuda:0"
-        rag_gpu = "cuda:1"
-        asr_gpu = "cuda:1"
-        tts_gpu = "cuda:1"
+        llm_gpu = "cuda:0"     # GPU 0: Exclusively dedicated to Gemma 2 2B LLM
+        rag_gpu = "cuda:1"     # GPU 1: BGE-M3 + Reranker
+        asr_gpu = "cuda:1"     # GPU 1: faster-whisper ASR
+        tts_gpu = "cuda:1"     # GPU 1: OmniVoice TTS
     elif num_gpus == 1:
         llm_gpu = "cuda:0"
         rag_gpu = "cuda:0"
@@ -2199,128 +1732,106 @@ def main():
         asr_gpu = "cpu"
         tts_gpu = "cpu"
 
-    # ── Start Cloudflare Tunnel IMMEDIATELY in parallel ──
-    tunnel_url_holder = [None]
+    # ── Step 1: Load RAG database ──
+    print("\n[1/6] Loading RAG database...", flush=True)
+    db_path = None
+    # Search all possible locations
+    search_paths = [
+        "/kaggle/working/rag_database_master.json",
+        "/kaggle/input/ayush-ipr-rag-database/rag_database_master.json",
+        "/kaggle/input/ayush-ipr-rag-database/ayush-ipr-rag-database/rag_database_master.json",
+    ]
+    # Also scan /kaggle/input/ recursively for the file
+    if os.path.exists("/kaggle/input"):
+        for root, dirs, files in os.walk("/kaggle/input"):
+            for fname in files:
+                if fname == "rag_database_master.json":
+                    search_paths.append(os.path.join(root, fname))
+
+    for p in search_paths:
+        if os.path.exists(p):
+            try:
+                with open(p, 'r', encoding='utf-8') as f:
+                    recs = json.load(f)
+                if len(recs) > 1000:
+                    db_path = p
+                    print(f"  ✓ Found fresh expanded database ({len(recs)} records) at: {db_path}", flush=True)
+                    break
+            except Exception:
+                pass
+
+    # If not found or stale (less than 1000 records), download latest version from Kaggle
+    if db_path is None:
+        print("  Downloading latest 6643-record dataset from Kaggle Hub...", flush=True)
+        os.system('kaggle datasets download vanshseth003/ayush-ipr-rag-database -p /kaggle/working/ --unzip --force 2>&1 || true')
+        for root, dirs, files in os.walk("/kaggle/working"):
+            for fname in files:
+                if fname == "rag_database_master.json":
+                    db_path = os.path.join(root, fname)
+                    break
+
+    if not db_path or not os.path.exists(db_path):
+        print("  FATAL: Cannot find rag_database_master.json anywhere!", flush=True)
+        return
+
+    rag_db.load_database(db_path)
+
+    # ── Step 2: Load embedding model + build index ──
+    print(f"\n[2/6] Loading BGE-M3 + building FAISS index on {rag_gpu}...", flush=True)
+    rag_db.load_embeddings_model(device=rag_gpu)
+    rag_db.build_index()
+    vram_report("after-index")
+
+    # ── Step 3: Load reranker ──
+    print(f"\n[3/6] Loading reranker on {rag_gpu}...", flush=True)
+    rag_db.load_reranker(device=rag_gpu)
+    vram_report("after-reranker")
+
+    # ── Step 4: Load LLM (with auto-fallback) ──
+    print(f"\n[4/6] Loading LLM on {llm_gpu}...", flush=True)
+    llm_success = llm.load(device=llm_gpu)
+    if not llm_success:
+        print("  ✗ FATAL: No LLM could be loaded. Exiting.", flush=True)
+        return
+    vram_report("after-LLM")
+
+    # ── Step 5: Load ASR ──
+    print(f"\n[5/6] Loading faster-whisper ASR on {asr_gpu}...", flush=True)
+    asr.load(device=asr_gpu)
+    vram_report("after-ASR")
+
+    # ── Step 6: Load OmniVoice TTS ──
+    print(f"\n[6/6] Loading OmniVoice TTS on {tts_gpu}...", flush=True)
+    tts_success = tts.load(device=tts_gpu)
+    if not tts_success:
+        print("  WARNING: OmniVoice TTS failed to load. /api/tts will return 503.", flush=True)
+    vram_report("after-TTS")
+
+    # ── Final VRAM report ──
+    print("\n" + "=" * 60)
+    print("  ALL MODELS LOADED — Final VRAM:")
+    print("=" * 60, flush=True)
+    vram_report("FINAL")
+
+    # ── Start tunnel (both localtunnel & cloudflared) ──
+    tunnel_url = None
     def run_tunnel():
-        url = start_cloudflared_tunnel(PORT)
-        tunnel_url_holder[0] = url
+        nonlocal tunnel_url
+        tunnel_url = start_localtunnel(PORT)
     tunnel_thread = threading.Thread(target=run_tunnel, daemon=True)
     tunnel_thread.start()
 
-    # ── Start auto-shutdown watchdog ──
-    threading.Thread(target=_auto_shutdown_watchdog, daemon=True).start()
+    # Also start cloudflared in background for dual redundancy
+    threading.Thread(target=lambda: start_cloudflared_fallback(PORT), daemon=True).start()
 
-    # ── Load models in a background thread while FastAPI starts immediately ──
-    def load_all_models():
-        global models_ready, current_boot_step, current_boot_step_display
+    # Run auto-tests in background after a brief delay so server starts immediately
+    def background_tests():
+        time.sleep(10)
+        run_tests()
+    threading.Thread(target=background_tests, daemon=True).start()
 
-        # Step 1: Load RAG database (CPU, fast)
-        current_boot_step = "loading_rag_db"
-        current_boot_step_display = "Loading statutory RAG database (4,678 records)..."
-        print(f"\n[1/4] {current_boot_step_display}", flush=True)
-        db_path = None
-        search_paths = [
-            "/kaggle/working/rag_database_master.json",
-            "/kaggle/input/ayush-ipr-rag-database/rag_database_master.json",
-            "/kaggle/input/ayush-ipr-rag-database/ayush-ipr-rag-database/rag_database_master.json",
-        ]
-        if os.path.exists("/kaggle/input"):
-            for root, dirs, files in os.walk("/kaggle/input"):
-                for fname in files:
-                    if fname == "rag_database_master.json":
-                        search_paths.append(os.path.join(root, fname))
-
-        for p in search_paths:
-            if os.path.exists(p):
-                try:
-                    with open(p, 'r', encoding='utf-8') as f:
-                        recs = json.load(f)
-                    if len(recs) > 500:
-                        db_path = p
-                        print(f"  ✓ Found database ({len(recs)} records) at: {db_path}", flush=True)
-                        break
-                except Exception:
-                    pass
-
-        if db_path is None:
-            print("  Downloading dataset from Kaggle Hub...", flush=True)
-            os.system('kaggle datasets download vanshseth003/ayush-ipr-rag-database -p /kaggle/working/ --unzip --force 2>&1 || true')
-            for root, dirs, files in os.walk("/kaggle/working"):
-                for fname in files:
-                    if fname == "rag_database_master.json":
-                        db_path = os.path.join(root, fname)
-                        break
-
-        if not db_path or not os.path.exists(db_path):
-            print("  FATAL: Cannot find rag_database_master.json!", flush=True)
-            return
-
-        rag_db.load_database(db_path)
-
-        # Step 2: Load embeddings + build index + reranker
-        current_boot_step = "loading_embeddings"
-        current_boot_step_display = "Loading BGE-M3 statutory embeddings on GPU 1..."
-        print(f"\n[2/4] {current_boot_step_display}", flush=True)
-        rag_db.load_embeddings_model(device=rag_gpu)
-
-        current_boot_step = "building_index"
-        current_boot_step_display = "Building FAISS vector & BM25 sparse hybrid index..."
-        print(f"  {current_boot_step_display}", flush=True)
-        rag_db.build_index()
-
-        current_boot_step = "loading_reranker"
-        current_boot_step_display = "Loading BGE-Reranker-V2 cross-encoder on GPU 1..."
-        print(f"  {current_boot_step_display}", flush=True)
-        rag_db.load_reranker(device=rag_gpu)
-        vram_report("after-RAG")
-
-        # Step 3: Load LLM
-        current_boot_step = "loading_llm"
-        current_boot_step_display = "Loading Gemma-2-2B-IT model weights on GPU 0..."
-        print(f"\n[3/4] {current_boot_step_display}", flush=True)
-        llm_success = llm.load(device=llm_gpu)
-        if not llm_success:
-            print("  ✗ FATAL: No LLM could be loaded.", flush=True)
-            return
-        vram_report("after-LLM")
-
-        # ══ CHAT IS NOW READY ══
-        models_ready = True
-        current_boot_step = "ready"
-        current_boot_step_display = "All models loaded. AI Legal Advisory ready!"
-        print("\n" + "=" * 60, flush=True)
-        print("  ✓ CHAT READY — LLM + RAG loaded", flush=True)
-        print("=" * 60, flush=True)
-
-        # Update Gist status to "running" now that chat is ready
-        url = tunnel_url_holder[0]
-        if not url:
-            tunnel_thread.join(timeout=30)
-            url = tunnel_url_holder[0]
-        if url and url != "TUNNEL_FAILED":
-            _registry_push_url(url, status="running")
-            # Start heartbeat loop
-            threading.Thread(target=_registry_heartbeat_loop, args=(url,), daemon=True).start()
-
-        # Step 4: Load ASR + TTS in background (non-blocking for chat)
-        print(f"\n[4/4] Loading ASR + TTS in background on {asr_gpu}...", flush=True)
-        try:
-            asr.load(device=asr_gpu)
-        except Exception as e:
-            print(f"  ASR load warning: {e}", flush=True)
-        try:
-            tts.load(device=tts_gpu)
-        except Exception as e:
-            print(f"  TTS load warning: {e}", flush=True)
-
-        vram_report("FINAL")
-        print("\n  ✓ ALL MODELS LOADED — Server fully operational", flush=True)
-
-    # Start model loading in background
-    threading.Thread(target=load_all_models, daemon=True).start()
-
-    # ── Start FastAPI IMMEDIATELY (before models are loaded) ──
-    print(f"\n  Starting FastAPI server on port {PORT} (models loading in background)...", flush=True)
+    # ── Start FastAPI ──
+    print(f"\n  Starting FastAPI server on port {PORT}...", flush=True)
     nest_asyncio.apply()
     uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="info")
 

@@ -5,7 +5,7 @@ import time
 
 sys.stdout.reconfigure(encoding='utf-8')
 
-base_url = 'https://twelve-pigs-fix.loca.lt'
+base_url = 'https://permanent-relatively-bra-reforms.trycloudflare.com'
 headers = {
     'Bypass-Tunnel-Reminder': 'true',
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',

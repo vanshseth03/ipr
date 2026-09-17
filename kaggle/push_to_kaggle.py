@@ -30,7 +30,7 @@ def create_kernel_metadata():
         "kernel_type": "script",
         "is_private": True,
         "enable_gpu": True,
-        "accelerator": "gpu_t4x2",
+        "machine_shape": "NvidiaTeslaT4",
         "enable_internet": True,
         "keywords": [],
         "dataset_sources": [
@@ -60,6 +60,13 @@ def push_dataset():
         safe_print(f"  [ERROR] {src} not found!")
         return False
     shutil.copy2(src, ds_dir / "rag_database_master.json")
+
+    # Copy pre-computed indices if available
+    for fname in ["faiss_bge_m3.index", "bm25_corpus.pkl"]:
+        fpath = ROOT / fname
+        if fpath.exists():
+            shutil.copy2(fpath, ds_dir / fname)
+            safe_print(f"  ✓ Included {fname} ({fpath.stat().st_size / (1024*1024):.2f} MB)")
 
     # Create dataset metadata
     ds_meta = {
@@ -104,10 +111,9 @@ def push_kernel():
     env = os.environ.copy()
     env["PYTHONUTF8"] = "1"
 
-    # --accelerator flag selects GPU type (from reference implementation)
+    # Push using NvidiaTeslaT4 machine shape
     result = subprocess.run(
-        ["kaggle", "kernels", "push", "-p", str(KAGGLE_DIR),
-         "--accelerator", "NvidiaTeslaT4"],
+        ["kaggle", "kernels", "push", "-p", str(KAGGLE_DIR), "--accelerator", "NvidiaTeslaT4"],
         capture_output=True, env=env,
     )
     if result.stdout:
