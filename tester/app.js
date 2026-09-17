@@ -8,7 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- STATE ---
   const state = {
-    baseUrl: 'https://breezy-windows-doubt.loca.lt',
+    baseUrl: 'https://lock-innovative-regional-viii.trycloudflare.com',
     bypassLocaltunnel: true,
     isConnected: false,
     ragDbRecords: [],

@@ -5,9 +5,9 @@ import time
 
 sys.stdout.reconfigure(encoding='utf-8')
 
-base_url = 'https://breezy-windows-doubt.loca.lt'
-query = 'Did the Biological Diversity (Amendment) Act 2023 exempt registered AYUSH practitioners and Vaidyas from prior intimation to State Biodiversity Boards?'
-payload = json.dumps({'query': query, 'top_k': 7}).encode('utf-8')
+base_url = 'https://lock-innovative-regional-viii.trycloudflare.com'
+query = 'apko international patent law kebarein me ky lagta hai'
+payload = json.dumps({'query': query, 'top_k': 5, 'language': 'hi'}).encode('utf-8')
 req = urllib.request.Request(
     f'{base_url}/api/chat/stream',
     data=payload,
