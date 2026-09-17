@@ -827,33 +827,11 @@ class OmniVoiceTTSManager:
         if not clean:
             raise ValueError("No speakable text provided")
 
-        # 2. Detect language (native scripts + language codes)
-        lang_str = str(language or "").lower()
-        if any('\u0900' <= ch <= '\u097f' for ch in clean) or lang_str in ("hi", "hindi", "hi-in"):
+        # 2. Detect language (native Devanagari vs English)
+        is_hi = (language in ("hi", "Hindi", "hi-IN")) or any('\u0900' <= ch <= '\u097f' for ch in clean)
+        if is_hi:
             clean = _romanized_hindi_to_devanagari(clean)
-            target_lang = "Hindi"
-        elif any('\u0B80' <= ch <= '\u0BFF' for ch in clean) or lang_str in ("ta", "tamil", "ta-in"):
-            target_lang = "Tamil"
-        elif any('\u0C00' <= ch <= '\u0C7F' for ch in clean) or lang_str in ("te", "telugu", "te-in"):
-            target_lang = "Telugu"
-        elif any('\u0980' <= ch <= '\u09FF' for ch in clean) or lang_str in ("bn", "bengali", "bn-in"):
-            target_lang = "Bengali"
-        elif any('\u0A80' <= ch <= '\u0AFF' for ch in clean) or lang_str in ("gu", "gujarati", "gu-in"):
-            target_lang = "Gujarati"
-        elif any('\u0C80' <= ch <= '\u0CFF' for ch in clean) or lang_str in ("kn", "kannada", "kn-in"):
-            target_lang = "Kannada"
-        elif any('\u0D00' <= ch <= '\u0D7F' for ch in clean) or lang_str in ("ml", "malayalam", "ml-in"):
-            target_lang = "Malayalam"
-        elif any('\u0A00' <= ch <= '\u0A7F' for ch in clean) or lang_str in ("pa", "punjabi", "pa-in"):
-            target_lang = "Punjabi"
-        elif lang_str in ("mr", "marathi", "mr-in"):
-            clean = _romanized_hindi_to_devanagari(clean)
-            target_lang = "Marathi"
-        elif is_hindi_query(clean):
-            clean = _romanized_hindi_to_devanagari(clean)
-            target_lang = "Hindi"
-        else:
-            target_lang = "English"
+        target_lang = "Hindi" if is_hi else "English"
 
         # 3. Split long text into natural sentence batches (~300-400 chars) for stable neural synthesis
         sentences = re.split(r'(?<=[.!?।])\s+', clean)

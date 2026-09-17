@@ -17,9 +17,17 @@ export function useSpeak() {
       setSpeakingMessageId(messageId);
       setIsLoadingTTS(true);
 
+      const langMap = {
+        hi: 'hi-IN',
+        ta: 'ta-IN',
+        te: 'te-IN',
+        bn: 'bn-IN',
+        en: 'en-IN',
+      };
       const targetLang =
         options.language ||
-        (language === 'hi' ? 'hi-IN' : 'en-IN');
+        langMap[language] ||
+        'en-IN';
 
       speakText(text, {
         ...options,

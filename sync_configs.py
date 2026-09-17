@@ -1,7 +1,7 @@
 import re
 from pathlib import Path
 
-LIVE_URL = 'https://permanent-relatively-bra-reforms.trycloudflare.com'
+LIVE_URL = 'https://toolbox-computing-necessary-export.trycloudflare.com'
 root = Path(__file__).parent
 
 # 1. New folder/.env

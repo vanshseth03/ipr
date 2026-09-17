@@ -1,21 +1,674 @@
-const DEFAULT_HOST = 'localhost:8000';
+// ─── Server Registry (GitHub Gist) ───────────────────────────
+// The Kaggle server pushes its URL to this Gist on boot.
+// The app reads it to auto-discover the live backend URL.
+const GIST_REGISTRY_URL = 'https://api.github.com/gists/7873aa6da8f97b2b817137dd4f2df5be';
+const GIST_RAW_URL = 'https://gist.githubusercontent.com/vanshseth03/7873aa6da8f97b2b817137dd4f2df5be/raw/server_registry.json';
+const DAEMON_STATUS_URL = 'http://localhost:3333/status';
+const GIST_FILENAME = 'server_registry.json';
+const GITHUB_TOKEN = process.env.EXPO_PUBLIC_GITHUB_TOKEN || '';
+
+export const CLOUD_API_BASE = typeof window !== 'undefined'
+  ? window.location.origin
+  : (process.env.EXPO_PUBLIC_CLOUD_API_URL || 'https://ipr112211.vercel.app');
+
+export const isLocalhost = typeof window !== 'undefined'
+  ? (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  : true;
+
+// Fallback URL (will be overwritten by Gist registry)
+let _resolvedBackendUrl = '';
+let _serverReady = false;
+let _serverStatus = 'unknown'; // 'unknown' | 'loading' | 'running' | 'offline'
+let _lastRegistryCheck = 0;
+const REGISTRY_CACHE_MS = 10000; // Re-check registry every 10s
+
+export async function markGitRegistryOffline() {
+  try {
+    // 1. Inform serverless API first (handles authentication securely)
+    for (const stopPath of [`${CLOUD_API_BASE}/api/stop`, `${CLOUD_API_BASE}/api/server/stop`]) {
+      try {
+        const cResp = await fetch(stopPath, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'User-Agent': 'AYUSH-IPR-App' },
+          body: JSON.stringify({ reason: 'stale_registry_detected' }),
+        });
+        if (cResp.ok) {
+          console.log('[Registry] ✓ Stale/dead URL marked offline via cloud API');
+          return;
+        }
+      } catch (_) {}
+    }
+
+    // 2. Direct GitHub Gist PATCH only if GITHUB_TOKEN is configured
+    if (GITHUB_TOKEN) {
+      const payload = JSON.stringify({
+        files: {
+          [GIST_FILENAME]: {
+            content: JSON.stringify({
+              server_url: '',
+              status: 'offline',
+              started_at: '',
+              expires_at: '',
+              last_heartbeat: new Date().toISOString(),
+              kaggle_kernel: 'vanshseth003/ayush-ipr-guardian',
+            }, null, 2),
+          },
+        },
+      });
+      const patchResp = await fetch(GIST_REGISTRY_URL, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${GITHUB_TOKEN}`,
+          'Content-Type': 'application/json',
+          'User-Agent': 'AYUSH-IPR-Guardian',
+        },
+        body: payload,
+      });
+      if (patchResp.ok) {
+        console.log('[Registry] ✓ Stale/dead URL cleared from Gist registry');
+      }
+    }
+  } catch (err) {
+    console.warn('[Registry] Could not nullify Gist:', err.message);
+  }
+}
+
+/**
+ * Fetch the live server URL from multiple robust sources:
+ * 1. Local trigger daemon (port 3333) — instant, zero latency, immune to rate limits
+ * 2. GitHub Gist API with Bearer token — 5,000 requests/hr
+ * 3. GitHub Gist raw URL — zero rate limit
+ * ALWAYS PROMPTS /api/health FIRST to acknowledge whether server is actually present!
+ */
+export async function fetchServerRegistry(forceFresh = false) {
+  try {
+    const now = Date.now();
+    if (!forceFresh && _resolvedBackendUrl && _serverReady && (now - _lastRegistryCheck) < REGISTRY_CACHE_MS) {
+      return { url: _resolvedBackendUrl, status: _serverStatus, ready: _serverReady };
+    }
+
+    let registry = null;
+
+    // Strategy 0: Cloud Serverless API (/api/status & /api/server/status) — Central API for Web & Mobile
+    for (const statusPath of [`${CLOUD_API_BASE}/api/status`, `${CLOUD_API_BASE}/api/server/status`]) {
+      if (registry?.server_url) break;
+      try {
+        const cCtrl = new AbortController();
+        const cTimer = setTimeout(() => cCtrl.abort(), 3000);
+        const cResp = await fetch(statusPath, {
+          signal: cCtrl.signal,
+          headers: { 'User-Agent': 'AYUSH-IPR-Guardian' },
+        });
+        clearTimeout(cTimer);
+        if (cResp.ok) {
+          const cData = await cResp.json();
+          if (cData?.server_url) {
+            registry = {
+              server_url: cData.server_url,
+              status: cData.status || 'running',
+              started_at: cData.started_at || new Date().toISOString(),
+            };
+          } else if (cData?.status === 'booting') {
+            _serverStatus = 'booting';
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Strategy 1: Local daemon (ONLY on localhost — strictly disabled on Vercel to avoid loopback CORS block)
+    if (isLocalhost && !registry?.server_url) {
+      try {
+        const dCtrl = new AbortController();
+        const dTimer = setTimeout(() => dCtrl.abort(), 1500);
+        const dResp = await fetch(DAEMON_STATUS_URL, {
+          signal: dCtrl.signal,
+          headers: { 'User-Agent': 'AYUSH-IPR-Guardian' },
+        });
+        clearTimeout(dTimer);
+        if (dResp.ok) {
+          const dData = await dResp.json();
+          if (dData?.server_url) {
+            registry = {
+              server_url: dData.server_url,
+              status: dData.status || 'running',
+              started_at: new Date().toISOString(),
+            };
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Strategy 2: GitHub Gist API (only attach Authorization if GITHUB_TOKEN is present to prevent 401)
+    if (!registry?.server_url) {
+      try {
+        const gCtrl = new AbortController();
+        const gTimer = setTimeout(() => gCtrl.abort(), 3500);
+        const gHeaders = { 'User-Agent': 'AYUSH-IPR-Guardian' };
+        if (GITHUB_TOKEN) {
+          gHeaders['Authorization'] = `Bearer ${GITHUB_TOKEN}`;
+        }
+        const resp = await fetch(GIST_REGISTRY_URL, {
+          signal: gCtrl.signal,
+          headers: gHeaders,
+          cache: 'no-cache',
+        });
+        clearTimeout(gTimer);
+        if (resp.ok) {
+          const gist = await resp.json();
+          const content = gist?.files?.[GIST_FILENAME]?.content;
+          if (content) {
+            registry = JSON.parse(content);
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Strategy 3: GitHub Gist raw URL (unauthenticated, zero rate-limit)
+    if (!registry?.server_url) {
+      try {
+        const rCtrl = new AbortController();
+        const rTimer = setTimeout(() => rCtrl.abort(), 3500);
+        const rawResp = await fetch(`${GIST_RAW_URL}?_t=${Date.now()}`, {
+          signal: rCtrl.signal,
+          cache: 'no-cache',
+        });
+        clearTimeout(rTimer);
+        if (rawResp.ok) {
+          registry = await rawResp.json();
+        }
+      } catch (_) {}
+    }
+
+    // Strategy 4: Fallback to ntfy.sh tunnel broadcast (immune to lack of Gist tokens)
+    if (!registry?.server_url) {
+      try {
+        const nCtrl = new AbortController();
+        const nTimer = setTimeout(() => nCtrl.abort(), 3500);
+        const nResp = await fetch('https://ntfy.sh/ayush_ipr_tunnel_sih2026/json?poll=1', {
+          signal: nCtrl.signal,
+          headers: { 'User-Agent': 'AYUSH-IPR-Guardian' },
+        });
+        clearTimeout(nTimer);
+        if (nResp.ok) {
+          const text = await nResp.text();
+          const lines = text.split('\n').filter(Boolean);
+          for (let i = lines.length - 1; i >= 0; i--) {
+            try {
+              const item = JSON.parse(lines[i]);
+              const match = (item.message || '').match(/(https:\/\/[a-z0-9-]+\.trycloudflare\.com)/i);
+              if (match) {
+                registry = {
+                  server_url: match[1],
+                  status: 'running',
+                  started_at: item.time ? new Date(item.time * 1000).toISOString() : new Date().toISOString(),
+                };
+                break;
+              }
+            } catch (_) {}
+          }
+        }
+      } catch (_) {}
+    }
+
+    _lastRegistryCheck = now;
+
+    if (registry?.server_url && (registry.status === 'running' || registry.status === 'booting')) {
+      const cleanUrl = registry.server_url.replace(/\/$/, '');
+
+      // Check expiry first
+      const expires = new Date(registry.expires_at);
+      if (!isNaN(expires.getTime()) && expires < new Date() && registry.status === 'running') {
+        console.warn('[Registry] Server record expired. Nullifying Git registry.');
+        _serverStatus = 'offline';
+        _serverReady = false;
+        _resolvedBackendUrl = '';
+        await markGitRegistryOffline();
+        return { url: '', status: 'offline', ready: false, needRepush: true };
+      }
+
+      // ALWAYS ping /api/health FIRST to acknowledge whether server is ACTUALLY present!
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const healthResp = await fetch(`${cleanUrl}/api/health`, {
+          signal: controller.signal,
+          headers: {
+            'Bypass-Tunnel-Reminder': 'true',
+            'bypass-tunnel-reminder': '1',
+          },
+        });
+        clearTimeout(timeoutId);
+
+        if (healthResp.ok) {
+          const health = await healthResp.json();
+          _resolvedBackendUrl = cleanUrl;
+          _serverReady = !!health.ready;
+          _serverStatus = _serverReady ? 'running' : 'booting';
+          return {
+            url: cleanUrl,
+            status: _serverStatus,
+            ready: _serverReady,
+            step: health.step || (_serverReady ? 'ready' : 'loading_weights'),
+            stepDisplay: health.step_display || (_serverReady ? 'All models ready' : 'Loading model weights into GPU...'),
+            models: health.models,
+            gpu: health.gpu,
+          };
+        }
+      } catch (pingErr) {
+        console.warn(`[Registry] Health ping failed for ${cleanUrl}:`, pingErr.message);
+      }
+
+      // If health ping failed for cleanUrl, check if ntfy has a fresher live tunnel!
+      try {
+        const nCtrl = new AbortController();
+        const nTimer = setTimeout(() => nCtrl.abort(), 3000);
+        const nResp = await fetch('https://ntfy.sh/ayush_ipr_tunnel_sih2026/json?poll=1', { signal: nCtrl.signal });
+        clearTimeout(nTimer);
+        if (nResp.ok) {
+          const text = await nResp.text();
+          const lines = text.split('\n').filter(Boolean);
+          for (let i = lines.length - 1; i >= 0; i--) {
+            try {
+              const item = JSON.parse(lines[i]);
+              const match = (item.message || '').match(/(https:\/\/[a-z0-9-]+\.trycloudflare\.com)/i);
+              if (match && match[1] !== cleanUrl) {
+                const altUrl = match[1];
+                const altCtrl = new AbortController();
+                const altTimer = setTimeout(() => altCtrl.abort(), 3500);
+                const altResp = await fetch(`${altUrl}/api/health`, {
+                  signal: altCtrl.signal,
+                  headers: { 'Bypass-Tunnel-Reminder': 'true' },
+                });
+                clearTimeout(altTimer);
+                if (altResp.ok) {
+                  const altHealth = await altResp.json();
+                  _resolvedBackendUrl = altUrl;
+                  _serverReady = !!altHealth.ready;
+                  _serverStatus = _serverReady ? 'running' : 'booting';
+                  return {
+                    url: altUrl,
+                    status: _serverStatus,
+                    ready: _serverReady,
+                    step: altHealth.step || (_serverReady ? 'ready' : 'loading_weights'),
+                    stepDisplay: altHealth.step_display || (_serverReady ? 'All models ready' : 'Loading model weights into GPU...'),
+                    models: altHealth.models,
+                    gpu: altHealth.gpu,
+                  };
+                }
+              }
+            } catch (_) {}
+          }
+        }
+      } catch (_) {}
+
+      // If health ping failed:
+      // Even if Git showed not expired, acknowledge that server is NOT present!
+      if (registry.status === 'running') {
+        console.warn('[Registry] Server marked running in Git failed /api/health! Nullifying Git and marking repush needed.');
+        await markGitRegistryOffline();
+        _serverStatus = 'offline';
+        _serverReady = false;
+        _resolvedBackendUrl = '';
+        return { url: '', status: 'offline', ready: false, needRepush: true };
+      }
+
+      // If status is booting, allow at most 60s for Cloudflare tunnel DNS propagation
+      const startedAt = new Date(registry.started_at);
+      const bootAgeMs = !isNaN(startedAt.getTime()) ? (Date.now() - startedAt.getTime()) : 999999;
+      if (bootAgeMs > 60 * 1000) {
+        console.warn(`[Registry] Server booting for > 60s (${Math.round(bootAgeMs/1000)}s) without responding to /api/health. Nullifying Gist and marking repush needed.`);
+        await markGitRegistryOffline();
+        _serverStatus = 'offline';
+        _serverReady = false;
+        _resolvedBackendUrl = '';
+        return { url: '', status: 'offline', ready: false, needRepush: true };
+      }
+
+      // Kernel just booted and tunnel URL is registered; tunnel is establishing (within 60s window)
+      _resolvedBackendUrl = cleanUrl;
+      _serverStatus = 'booting';
+      _serverReady = false;
+      return {
+        url: cleanUrl,
+        status: 'booting',
+        ready: false,
+        step: 'tunnel_pending',
+        stepDisplay: 'Connecting to Cloudflare tunnel...',
+      };
+    }
+
+    _serverStatus = registry?.status || 'offline';
+    _serverReady = false;
+    _resolvedBackendUrl = '';
+    return { url: '', status: _serverStatus, ready: false, needRepush: true };
+  } catch (err) {
+    console.warn('[Registry] Fetch failed:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Get the current backend URL. Tries Gist registry first,
+ * falls back to any previously resolved URL.
+ */
+export async function getBackendUrl() {
+  const reg = await fetchServerRegistry();
+  if (reg?.url) return reg.url;
+  if (_resolvedBackendUrl) return _resolvedBackendUrl;
+  return ''; // No server available
+}
+
+/** Sync getter for last known URL (no await needed). */
+export function getLastKnownBackendUrl() {
+  return _resolvedBackendUrl;
+}
+
+/** Get current server status. */
+export function getServerStatus() {
+  return { status: _serverStatus, ready: _serverReady, url: _resolvedBackendUrl };
+}
+
+/** Force a re-check of the registry on next call. */
+export function invalidateRegistryCache() {
+  _lastRegistryCheck = 0;
+}
 
 export const APP_CONFIG = {
-  apiBaseUrl: process.env.EXPO_PUBLIC_API_URL || `http://${DEFAULT_HOST}/api`,
-  wsBaseUrl: process.env.EXPO_PUBLIC_WS_URL || `ws://${DEFAULT_HOST}/ws/voice`,
-  sseBaseUrl: process.env.EXPO_PUBLIC_SSE_URL || `http://${DEFAULT_HOST}/api/chat/stream`,
-  mockMode: process.env.EXPO_PUBLIC_MOCK_MODE === 'true',
+  get apiBaseUrl() {
+    return _resolvedBackendUrl ? `${_resolvedBackendUrl}/api` : '';
+  },
+  get wsBaseUrl() {
+    return _resolvedBackendUrl ? `${_resolvedBackendUrl.replace('https://', 'wss://')}/ws/voice` : '';
+  },
+  get sseBaseUrl() {
+    return _resolvedBackendUrl ? `${_resolvedBackendUrl}/api/chat/stream` : '';
+  },
+  mockMode: false,
   defaultLanguage: 'en',
   supportedLanguages: [
     { code: 'en', label: 'English', nativeLabel: 'English' },
     { code: 'hi', label: 'हिंदी', nativeLabel: 'Hindi' },
+    { code: 'ta', label: 'தமிழ்', nativeLabel: 'Tamil' },
   ],
   defaultJurisdiction: 'IN',
   maxFileSizeMB: 10,
   maxFilePages: 20,
+  maxQueryLength: 2000,
+  maxHistoryTurns: 10,
+  maxRetries: 3,
+  retryDelayMs: 2000,
+  serverTTLMinutes: 60,
+  gistRegistryUrl: GIST_REGISTRY_URL,
+  triggerDaemonUrl: 'http://localhost:3333',
 };
 
-export const API_TIMEOUT_MS = 30000;
+export const API_TIMEOUT_MS = 90000;
+
+/**
+ * Trigger the Kaggle GPU server to start via Cloud Serverless API or local daemon.
+ * Works from Vercel web app and mobile APK!
+ * Returns { triggered, message, already_running } or null on failure.
+ */
+let _triggerInFlight = false;
+export async function triggerServerStart() {
+  if (_triggerInFlight) {
+    return { triggered: false, message: 'Trigger request already in flight' };
+  }
+  if (_serverReady) {
+    return { triggered: false, already_running: true, message: 'Server is already ready and running. Dual session prevented.' };
+  }
+  if (_serverStatus === 'booting' && _resolvedBackendUrl) {
+    return { triggered: false, already_running: true, message: 'Server is already booting with an active tunnel. Dual session prevented.' };
+  }
+  _triggerInFlight = true;
+
+  try {
+    // 1. Try Cloud Serverless API endpoints (/api/start & /api/server/start)
+    for (const startPath of [`${CLOUD_API_BASE}/api/start`, `${CLOUD_API_BASE}/api/server/start`]) {
+      try {
+        const cResp = await fetch(startPath, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'User-Agent': 'AYUSH-IPR-App' },
+        });
+        if (cResp.ok) {
+          const cData = await cResp.json();
+          _serverStatus = 'booting';
+          return cData;
+        }
+      } catch (_) {}
+    }
+
+    // 2. Only if on localhost, fallback to local auto-start daemon (port 3333)
+    if (isLocalhost) {
+      try {
+        const resp = await fetch(`${APP_CONFIG.triggerDaemonUrl}/start`, {
+          headers: { 'User-Agent': 'AYUSH-IPR-App' },
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          _serverStatus = 'booting';
+          return data;
+        }
+      } catch (err) {
+        console.warn('[Trigger] Local daemon not reachable:', err.message);
+      }
+    }
+  } finally {
+    _triggerInFlight = false;
+  }
+
+  return null;
+}
+
+/**
+ * Shut down the Kaggle GPU worker on demand to conserve GPU quota.
+ */
+export async function triggerServerStop() {
+  // 1. Try Cloud Serverless API endpoints (/api/stop & /api/server/stop)
+  for (const stopPath of [`${CLOUD_API_BASE}/api/stop`, `${CLOUD_API_BASE}/api/server/stop`]) {
+    try {
+      const cResp = await fetch(stopPath, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'User-Agent': 'AYUSH-IPR-App' },
+      });
+      if (cResp.ok) {
+        const cData = await cResp.json();
+        _serverReady = false;
+        _serverStatus = 'offline';
+        _resolvedBackendUrl = '';
+        return cData;
+      }
+    } catch (_) {}
+  }
+
+  // 2. Only if on localhost, fallback to local daemon
+  if (isLocalhost) {
+    try {
+      const resp = await fetch(`${APP_CONFIG.triggerDaemonUrl}/stop`, {
+        headers: { 'User-Agent': 'AYUSH-IPR-App' },
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        _serverReady = false;
+        _serverStatus = 'offline';
+        _resolvedBackendUrl = '';
+        return data;
+      }
+    } catch (err) {
+      console.warn('[Stop] Local daemon stop error:', err.message);
+    }
+  }
+  return null;
+}
+
+/**
+ * Fetch live Kaggle kernel terminal logs from Cloud Serverless API.
+ */
+export async function fetchServerLogs() {
+  try {
+    const resp = await fetch(`${CLOUD_API_BASE}/api/server/logs`, {
+      headers: { 'User-Agent': 'AYUSH-IPR-App' },
+    });
+    if (resp.ok) {
+      return await resp.json();
+    }
+  } catch (err) {
+    console.warn('[Logs] Could not fetch server logs:', err.message);
+  }
+  return { logs: [], error: 'Failed to fetch logs' };
+}
+
+/**
+ * Fetch high-level cloud server status.
+ */
+export async function fetchCloudServerStatus() {
+  try {
+    const resp = await fetch(`${CLOUD_API_BASE}/api/server/status`, {
+      headers: { 'User-Agent': 'AYUSH-IPR-App' },
+    });
+    if (resp.ok) {
+      return await resp.json();
+    }
+  } catch (err) {
+    console.warn('[Status] Could not fetch server status:', err.message);
+  }
+  return null;
+}
+
+/**
+ * Poll the server registry and stay in loop with the Cloudflare tunnel /api/health
+ * endpoint until server is completely ready. NEVER QUITS.
+ * Calls onStatus({ ready, step, message, url }) with live step updates.
+ */
+export async function waitForServer(onStatus) {
+  const pollInterval = 1500;
+  let activeUrl = _resolvedBackendUrl;
+  let healthFailCount = 0;
+
+  while (true) {
+    invalidateRegistryCache();
+
+    // 1. If we don't have a URL yet, query Git Gist to acquire the tunnel URL
+    if (!activeUrl) {
+      if (onStatus) {
+        onStatus({
+          ready: false,
+          step: 'kernel_booting',
+          message: 'Starting Kaggle GPU kernel — waiting for Cloudflare tunnel URL...',
+          url: '',
+        });
+      }
+
+      try {
+        const reg = await fetchServerRegistry(true);
+        if (reg?.url) {
+          activeUrl = reg.url;
+          _resolvedBackendUrl = activeUrl;
+          healthFailCount = 0;
+          if (onStatus) {
+            onStatus({
+              ready: !!reg.ready,
+              step: reg.step || 'tunnel_ready',
+              message: reg.stepDisplay || 'Cloudflare tunnel connected. Querying health state...',
+              url: activeUrl,
+            });
+          }
+          if (reg.ready) {
+            _serverStatus = 'running';
+            _serverReady = true;
+            return activeUrl;
+          }
+        }
+      } catch (gistErr) {
+        console.warn('[waitForServer] Gist poll note:', gistErr.message);
+      }
+
+      await new Promise((r) => setTimeout(r, pollInterval));
+      continue;
+    }
+
+    // 2. We have the tunnel URL! Webpage stays in continuous loop with /api/health
+    // which exploits current boot state: loading_rag_db, loading_embeddings, building_index, loading_reranker, loading_llm, ready
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const resp = await fetch(`${activeUrl}/api/health`, {
+        signal: controller.signal,
+        headers: {
+          'Bypass-Tunnel-Reminder': 'true',
+          'bypass-tunnel-reminder': '1',
+        },
+      });
+      clearTimeout(timeoutId);
+
+      if (resp.ok) {
+        healthFailCount = 0;
+        const health = await resp.json();
+        const step = health.step || (health.ready ? 'ready' : 'loading_weights');
+        const stepMsg = health.step_display || (health.ready ? 'All models loaded. AI Legal Advisory ready!' : 'Loading model weights into GPU...');
+
+        if (onStatus) {
+          onStatus({
+            ready: !!health.ready,
+            step,
+            message: stepMsg,
+            url: activeUrl,
+            models: health.models,
+            gpu: health.gpu,
+          });
+        }
+
+        // When ready === true, exit loop and return URL!
+        if (health.ready) {
+          _serverStatus = 'running';
+          _serverReady = true;
+          _resolvedBackendUrl = activeUrl;
+          return activeUrl;
+        }
+      } else {
+        // HTTP 530 / tunnel warming up
+        if (onStatus) {
+          onStatus({
+            ready: false,
+            step: 'tunnel_warming',
+            message: 'Cloudflare tunnel connected. Initializing FastAPI server...',
+            url: activeUrl,
+          });
+        }
+      }
+    } catch (e) {
+      healthFailCount++;
+      // If URL fails health check 3 consecutive times (DNS dead or container terminated), clear it immediately!
+      if (healthFailCount >= 3) {
+        console.warn(`[waitForServer] URL ${activeUrl} failed health check 3 times. Clearing dead URL and resetting Gist.`);
+        activeUrl = '';
+        _resolvedBackendUrl = '';
+        healthFailCount = 0;
+        await markGitRegistryOffline();
+      } else {
+        try {
+          const fresh = await fetchServerRegistry(true);
+          if (fresh?.url && fresh.url !== activeUrl) {
+            activeUrl = fresh.url;
+            _resolvedBackendUrl = activeUrl;
+            healthFailCount = 0;
+          }
+        } catch (_) {}
+
+        if (onStatus) {
+          onStatus({
+            ready: false,
+            step: 'tunnel_connecting',
+            message: 'Connecting to Cloudflare tunnel... Initializing models on GPU...',
+            url: activeUrl,
+          });
+        }
+      }
+    }
+
+    await new Promise((r) => setTimeout(r, pollInterval));
+  }
+}
 
 // ─── UI Translations (English & Hindi) ───────────────────────────
 export const UI_STRINGS = {

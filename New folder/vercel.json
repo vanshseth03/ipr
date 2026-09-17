@@ -1,11 +1,10 @@
 {
-  "framework": null,
   "buildCommand": "npx expo export -p web",
   "outputDirectory": "dist",
   "cleanUrls": true,
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
   ]
