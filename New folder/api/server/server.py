@@ -827,11 +827,33 @@ class OmniVoiceTTSManager:
         if not clean:
             raise ValueError("No speakable text provided")
 
-        # 2. Detect language (native Devanagari vs English)
-        is_hi = (language in ("hi", "Hindi", "hi-IN")) or any('\u0900' <= ch <= '\u097f' for ch in clean)
-        if is_hi:
+        # 2. Detect language (native scripts + language codes)
+        lang_str = str(language or "").lower()
+        if any('\u0900' <= ch <= '\u097f' for ch in clean) or lang_str in ("hi", "hindi", "hi-in"):
             clean = _romanized_hindi_to_devanagari(clean)
-        target_lang = "Hindi" if is_hi else "English"
+            target_lang = "Hindi"
+        elif any('\u0B80' <= ch <= '\u0BFF' for ch in clean) or lang_str in ("ta", "tamil", "ta-in"):
+            target_lang = "Tamil"
+        elif any('\u0C00' <= ch <= '\u0C7F' for ch in clean) or lang_str in ("te", "telugu", "te-in"):
+            target_lang = "Telugu"
+        elif any('\u0980' <= ch <= '\u09FF' for ch in clean) or lang_str in ("bn", "bengali", "bn-in"):
+            target_lang = "Bengali"
+        elif any('\u0A80' <= ch <= '\u0AFF' for ch in clean) or lang_str in ("gu", "gujarati", "gu-in"):
+            target_lang = "Gujarati"
+        elif any('\u0C80' <= ch <= '\u0CFF' for ch in clean) or lang_str in ("kn", "kannada", "kn-in"):
+            target_lang = "Kannada"
+        elif any('\u0D00' <= ch <= '\u0D7F' for ch in clean) or lang_str in ("ml", "malayalam", "ml-in"):
+            target_lang = "Malayalam"
+        elif any('\u0A00' <= ch <= '\u0A7F' for ch in clean) or lang_str in ("pa", "punjabi", "pa-in"):
+            target_lang = "Punjabi"
+        elif lang_str in ("mr", "marathi", "mr-in"):
+            clean = _romanized_hindi_to_devanagari(clean)
+            target_lang = "Marathi"
+        elif is_hindi_query(clean):
+            clean = _romanized_hindi_to_devanagari(clean)
+            target_lang = "Hindi"
+        else:
+            target_lang = "English"
 
         # 3. Split long text into natural sentence batches (~300-400 chars) for stable neural synthesis
         sentences = re.split(r'(?<=[.!?।])\s+', clean)
@@ -1068,6 +1090,15 @@ def is_hindi_query(text: str) -> bool:
 SYSTEM_PROMPT_EN = """You are AYUSH-IPR GUARDIAN, an expert AI legal advisor for Indian Traditional Medicine (AYUSH) and Intellectual Property Law.
 
 CORE RULES — FOLLOW STRICTLY:
+0. AUTONOMOUS CONTEXT RELEVANCE GATE (DECIDE BEFORE RESPONDING):
+   Before generating your response, internally evaluate:
+   a) Does the STATUTORY CONTEXT below actually help answer the user's specific query?
+   b) If NO (the query is a greeting, asking who you are / your identity, conversational small talk, or if the retrieved statutory chunks are unrelated to what the user asked):
+      -> COMPLETELY IGNORE the STATUTORY CONTEXT. Do NOT cite legal sections, do NOT reference statutory articles, and do NOT force legal jargon into greetings or identity replies. Provide a direct, natural, conversational response as AYUSH-IPR GUARDIAN.
+   c) If YES (the query specifically asks about formulation patentability, Section 3(p), classical texts, D&C Act, TKDL, shelf-life, GMP, etc.):
+      -> Synthesize and apply the STATUTORY CONTEXT to deliver an authoritative legal assessment with precise citations.
+   Make this decision autonomously on every single query without requiring user confirmation.
+
 1. SYNTHESIZE, DON'T COPY: Read the STATUTORY CONTEXT below and explain the answer IN YOUR OWN WORDS. Never copy-paste raw text from the context. Understand it, then explain it naturally like a knowledgeable lawyer talking to someone.
 2. NEVER HALLUCINATE REFERENCES: Do NOT say "see illustration", "refer to figure", "as shown in the diagram", "see table" or reference any visual element. There are no illustrations, figures, tables, or diagrams available. If you catch yourself about to reference one — STOP and rephrase.
 3. MATCH RESPONSE LENGTH TO QUESTION:
@@ -1103,6 +1134,15 @@ STATUTORY CONTEXT:
 SYSTEM_PROMPT_HI = """आप AYUSH-IPR GUARDIAN हैं — भारतीय पारंपरिक चिकित्सा (AYUSH) और बौद्धिक संपदा कानून के विशेषज्ञ AI कानूनी सलाहकार।
 
 मुख्य नियम — सख्ती से पालन करें:
+0. आंतरिक संदर्भ प्रासंगिकता निर्णय (उत्तर देने से पहले स्वयं तय करें):
+   हर उत्तर से पहले आंतरिक रूप से जांचें:
+   क) क्या नीचे दिया गया वैधानिक संदर्भ (STATUTORY CONTEXT) इस विशिष्ट प्रश्न का उत्तर देने में वास्तव में काम आता है?
+   ख) यदि नहीं (प्रश्न परिचय 'आप कौन हैं', अभिवादन 'नमस्ते', सामान्य बातचीत, या संदर्भ से असंबंधित विषय है):
+      -> वैधानिक संदर्भ को पूरी तरह अनदेखा करें। अभिवादन या सामान्य बातचीत में धाराएं या कानूनी संदर्भ जबरन न थोपें। सीधा, विनम्र और स्वाभाविक उत्तर दें।
+   ग) यदि हां (प्रश्न पारंपरिक चिकित्सा, पेटेंट योग्यता, धारा 3(p), नियम, या विनियामक अनुपालन पर है):
+      -> वैधानिक संदर्भ का उपयोग करके सटीक विश्लेषण और प्रासंगिक उद्धरण दें।
+   यह निर्णय आपको स्वयं लेना है, किसी अलग पुष्टि की आवश्यकता नहीं है।
+
 1. अपने शब्दों में समझाएं: नीचे दिए गए वैधानिक संदर्भ को पढ़ें और अपने शब्दों में समझाकर उत्तर दें। कच्चा पाठ कॉपी-पेस्ट न करें।
 2. कभी काल्पनिक संदर्भ न दें: "चित्र देखें", "तालिका देखें", "आरेख में दिखाया गया" कभी न कहें। कोई चित्र, तालिका, या आरेख उपलब्ध नहीं है।
 3. उत्तर की लंबाई प्रश्न के अनुसार रखें:
@@ -1258,26 +1298,72 @@ def build_context_string(results: List[Dict], min_score: float = -2.0) -> str:
     return "\n".join(context_parts)
 
 
-def is_simple_greeting(query: str) -> bool:
-    """Detect simple greetings that don't need the full RAG pipeline."""
-    q = query.strip().lower()
-    greetings = {
-        'hi', 'hello', 'hey', 'namaste', 'namaskar', 'pranam', 'halo',
+def is_greeting_or_identity(query: str) -> bool:
+    """Detect greetings, identity questions, or conversational pleasantries that do NOT need RAG."""
+    if not query or not query.strip():
+        return False
+    q = re.sub(r'[?!.,;:\'\"()॥।]', '', query).strip().lower()
+    words = q.split()
+    if not words:
+        return False
+
+    exact_phrases = {
+        'hi', 'hello', 'hey', 'namaste', 'namaskar', 'pranam', 'halo', 'hola',
         'thanks', 'thank you', 'dhanyawad', 'shukriya',
-        'bye', 'goodbye', 'alvida', 'ok', 'okay', 'theek hai',
+        'bye', 'goodbye', 'alvida', 'ok', 'okay', 'theek hai', 'thik hai',
         'good morning', 'good evening', 'good night', 'shubh prabhat',
-        'how are you', 'kaise ho', 'aap kaise hain',
-        'who are you', 'what are you', 'aap kaun hain', 'tum kaun ho',
-        'what can you do', 'aap kya kar sakte hain'
+        'how are you', 'kaise ho', 'aap kaise hain', 'kya haal hai',
+        'who are you', 'what are you', 'aap kaun hain', 'tum kaun ho', 'tu kaun hai',
+        'who made you', 'who created you', 'tell me about yourself', 'introduce yourself',
+        'apna parichay do', 'apne baare me batao', 'apne bare mein batao',
+        'what can you do', 'aap kya kar sakte hain', 'tum kya kar sakte ho',
+        'help', 'madad'
     }
-    return q in greetings
+    if q in exact_phrases:
+        return True
+
+    identity_patterns = [
+        r'\b(who|what)\s+are\s+you\b',
+        r'\b(tum|aap)\s+kaun\s+(ho|hain)\b',
+        r'\b(tell\s+me\s+about\s+yourself|introduce\s+yourself)\b',
+        r'\bapn[ae]\s+(parichay|baare|bare)\b',
+        r'\b(what\s+can\s+you\s+do|how\s+can\s+you\s+help)\b',
+        r'\b(aap|tum)\s+kya\s+kar\s+sakt[ei]\s+(ho|hain)\b',
+    ]
+    if any(re.search(pat, q) for pat in identity_patterns):
+        return True
+
+    if len(words) <= 3 and any(w in {'hi', 'hello', 'hey', 'namaste', 'namaskar', 'pranam'} for w in words):
+        return True
+
+    return False
+
+
+is_simple_greeting = is_greeting_or_identity
+
+
+def is_context_relevant_for_query(query: str, results: List[Dict]) -> bool:
+    """Internally check if the retrieved RAG context actually helps answer the query.
+    If the query is greeting/identity or the rerank scores indicate irrelevance, returns False."""
+    if not results:
+        return False
+    if is_greeting_or_identity(query):
+        return False
+    top_score = results[0].get("rerank_score", results[0].get("similarity_score", -999))
+    if "rerank_score" in results[0]:
+        if top_score < -2.2:  # BGE-Reranker-V2 score threshold for non-relevance
+            return False
+    else:
+        if top_score < 0.30:
+            return False
+    return True
 
 
 def estimate_max_tokens(query: str) -> int:
     """Dynamic token budget based on query INTENT, not just word count.
     Analyzes what kind of answer the question needs."""
     q = query.strip().lower()
-    if is_simple_greeting(q):
+    if is_greeting_or_identity(q):
         return 120
     words = q.split()
     wc = len(words)
@@ -1288,9 +1374,9 @@ def estimate_max_tokens(query: str) -> int:
                      'is it possible', 'can i', 'kya main', 'yes or no']
     # Intent signals for LONG answers (analysis, comparison, process, strategy)
     long_signals = ['how to', 'kaise', 'explain', 'compare', 'difference', 'process',
-                    'step by step', 'strategy', 'guide', 'procedure', 'requirements',
-                    'what are the', 'list all', 'elaborate', 'vistar', 'detail',
-                    'international', 'export', 'pct filing', 'patent prosecution']
+                     'step by step', 'strategy', 'guide', 'procedure', 'requirements',
+                     'what are the', 'list all', 'elaborate', 'vistar', 'detail',
+                     'international', 'export', 'pct filing', 'patent prosecution']
 
     is_short_intent = any(s in q for s in short_signals)
     is_long_intent = any(s in q for s in long_signals)
@@ -1318,14 +1404,20 @@ def rag_query(query: str, rag_db: RAGDatabase, llm: LLMManager, language: Option
     is_hi = language == "hi" or is_hindi_query(query)
     history_list = history or []
 
-    # Shortcut for greetings — skip RAG entirely
-    if is_simple_greeting(query) and len(history_list) <= 1:
+    # Autonomous Gating Check 1: Greetings & Identity queries — bypass RAG completely at any turn
+    if is_greeting_or_identity(query):
         t1 = time.time()
-        greet_prompt = "आप AYUSH-IPR GUARDIAN हैं। संक्षिप्त और विनम्र हिंदी में उत्तर दें।" if is_hi else "You are AYUSH-IPR GUARDIAN, an AI assistant for Indian traditional medicine IPR law. Respond briefly and warmly in the user's language."
+        greet_prompt = (
+            "आप AYUSH-IPR GUARDIAN हैं — भारतीय पारंपरिक चिकित्सा (AYUSH) और बौद्धिक संपदा कानून के विशेषज्ञ AI कानूनी सलाहकार। "
+            "उपयोगकर्ता के प्रश्न का संक्षिप्त, विनम्र और स्वाभाविक परिचय दें। कोई धारा या कानूनी कोड जबरन न लगाएं।"
+            if is_hi else
+            "You are AYUSH-IPR GUARDIAN, an AI assistant for Indian Traditional Medicine (AYUSH) and Intellectual Property Law. "
+            "Introduce yourself and state how you can assist briefly and warmly. Do NOT cite statutory legal sections."
+        )
         answer = llm.generate(
             greet_prompt,
             query,
-            max_tokens=100,
+            max_tokens=220,
             is_hindi=is_hi,
             history=history_list
         )
@@ -1336,7 +1428,7 @@ def rag_query(query: str, rag_db: RAGDatabase, llm: LLMManager, language: Option
                 "model": llm.model_name, "engine": getattr(llm, 'engine_type', 'fp16'),
                 "search_time_ms": 0, "generation_time_ms": round(gen_time * 1000),
                 "total_time_ms": round(gen_time * 1000), "sources_used": 0,
-                "retrieval_method": "none (greeting)",
+                "retrieval_method": "none (greeting/identity)",
             }
         }
 
@@ -1392,9 +1484,14 @@ def rag_query(query: str, rag_db: RAGDatabase, llm: LLMManager, language: Option
         results = [r for r in results if len(r.get('content', '')) > 50]
         search_time = time.time() - t0
 
-        # Step 2: Build saturated context (clean guidance if no match)
-        context_text = build_context_string(results)
-        context_block = format_statutory_context(context_text, is_hi=is_hi)
+        # Autonomous Gating Check 2: Does retrieved context actually help answer the query?
+        context_is_useful = is_context_relevant_for_query(query, results)
+        if not context_is_useful:
+            results = []
+            context_block = format_statutory_context("", is_hi=is_hi)
+        else:
+            context_text = build_context_string(results)
+            context_block = format_statutory_context(context_text, is_hi=is_hi)
 
         # Step 3: Full token budget + generate
         max_tok = estimate_max_tokens(query)
@@ -1629,14 +1726,14 @@ async def chat_stream(req: ChatRequest, request: "starlette.requests.Request" = 
         for m in req.messages:
             history_dicts.append({"role": m.role, "content": m.content})
 
-    # Shortcut for greetings — stream instant friendly greeting ONLY if no conversation history exists
-    if is_simple_greeting(req.query) and len(history_dicts) <= 1:
+    # Autonomous Gating Check 1: Greetings & Identity queries — bypass RAG completely at any turn
+    if is_greeting_or_identity(req.query):
         def stream_greeting():
             import json as _json
             import time as _time
             if is_hi:
                 greeting_ans = (
-                    "नमस्ते! मैं **AYUSH-IPR GUARDIAN** हूँ, भारतीय पारंपरिक चिकित्सा (आयुर्वेद, सिद्ध, यूनानी, होम्योपैथी) "
+                    "नमस्ते! मैं **AYUSH-IPR GUARDIAN** हूँ — भारतीय पारंपरिक चिकित्सा (आयुर्वेद, सिद्ध, यूनानी, होम्योपैथी) "
                     "और बौद्धिक संपदा कानून के लिए आपका आधिकारिक AI कानूनी सहायक।\n\n"
                     "मैं आपकी सहायता कर सकता हूँ:\n"
                     "- **पेटेंट योग्यता मूल्यांकन** (पेटेंट अधिनियम, 1970: धारा 3(p) पारंपरिक ज्ञान बार, धारा 3(j) पौधे, धारा 3(d), धारा 3(e))\n"
@@ -1726,8 +1823,15 @@ async def chat_stream(req: ChatRequest, request: "starlette.requests.Request" = 
         results = rag_db.hybrid_search(search_query, top_k=4)
         results = [r for r in results if len(r.get('content', '')) > 50]
         search_time = time.time() - t0
-        context_text = build_context_string(results)
-        context_block = format_statutory_context(context_text, is_hi=is_hi)
+
+        # Autonomous Gating Check 2: Does retrieved context actually help answer the query?
+        context_is_useful = is_context_relevant_for_query(req.query, results)
+        if not context_is_useful:
+            results = []
+            context_block = format_statutory_context("", is_hi=is_hi)
+        else:
+            context_text = build_context_string(results)
+            context_block = format_statutory_context(context_text, is_hi=is_hi)
 
         # Step 2: Prepare prompt + token budget
         sys_prompt = SYSTEM_PROMPT_HI if is_hi else SYSTEM_PROMPT_EN
