@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,15 +6,26 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Globe2, Scale, Trash2, Leaf, Check } from 'lucide-react-native';
+import { Globe2, Scale, Trash2, Leaf, Check, Server, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react-native';
 
 import { useSettingsStore } from '../../store/settingsStore';
 import { useHistoryStore } from '../../store/historyStore';
 import { useChatStore } from '../../store/chatStore';
 import { useLanguagePref } from '../../hooks/useLanguagePref';
-import { APP_CONFIG, t } from '../../constants/config';
+import {
+  APP_CONFIG,
+  t,
+  getCustomBackendUrl,
+  setCustomBackendUrl,
+  clearCustomBackendUrl,
+  probeUrlHealth,
+  getLastKnownBackendUrl,
+  fetchServerRegistry,
+} from '../../constants/config';
 import { colors, radii, spacing, typography, shadow } from '../../constants/theme';
 
 function SectionTitle({ icon: Icon, children }) {
@@ -31,6 +42,87 @@ export default function SettingsScreen() {
   const { language, setLanguage } = useLanguagePref();
   const { clearHistory } = useHistoryStore();
   const { clearMessages } = useChatStore();
+
+  const [backendInput, setBackendInput] = useState('');
+  const [activeBackendUrl, setActiveBackendUrl] = useState('');
+  const [serverHealth, setServerHealth] = useState({ status: 'checking', message: 'Checking server health...' });
+  const [isTestingUrl, setIsTestingUrl] = useState(false);
+
+  useEffect(() => {
+    const custom = getCustomBackendUrl();
+    const last = getLastKnownBackendUrl();
+    const initUrl = custom || last || '';
+    setActiveBackendUrl(initUrl);
+    setBackendInput(custom || '');
+
+    if (initUrl) {
+      probeUrlHealth(initUrl, 3000).then((res) => {
+        if (res) {
+          setServerHealth({
+            status: res.ready ? 'online' : 'booting',
+            message: res.ready ? 'Online & Ready (Gemma + RAG loaded)' : `Booting: ${res.stepDisplay || 'Loading models...'}`,
+          });
+        } else {
+          setServerHealth({ status: 'offline', message: 'Offline (No response from /api/health)' });
+        }
+      });
+    } else {
+      setServerHealth({ status: 'offline', message: 'No server URL configured' });
+    }
+  }, []);
+
+  const handleSaveBackend = async () => {
+    const raw = backendInput.trim();
+    if (!raw) {
+      clearCustomBackendUrl();
+      setActiveBackendUrl('');
+      setServerHealth({ status: 'offline', message: 'Reset to auto-discovery' });
+      Alert.alert('Reset', 'Cleared custom URL. App will auto-discover live tunnel.');
+      return;
+    }
+
+    setIsTestingUrl(true);
+    setServerHealth({ status: 'checking', message: 'Pinging /api/health...' });
+
+    const probe = await probeUrlHealth(raw, 4000);
+    setIsTestingUrl(false);
+
+    if (probe) {
+      setCustomBackendUrl(probe.url);
+      setActiveBackendUrl(probe.url);
+      setServerHealth({
+        status: probe.ready ? 'online' : 'booting',
+        message: probe.ready ? '✓ Connected & Ready (All models operational)' : `✓ Connected (Booting: ${probe.stepDisplay})`,
+      });
+      Alert.alert('Connected', `Successfully connected to:\n${probe.url}`);
+    } else {
+      setServerHealth({ status: 'offline', message: '✗ Could not reach /api/health at this URL' });
+      Alert.alert('Connection Failed', 'Could not reach server. Verify that your Kaggle kernel printed this trycloudflare URL.');
+    }
+  };
+
+  const handleAutoDiscover = async () => {
+    setIsTestingUrl(true);
+    setServerHealth({ status: 'checking', message: 'Auto-discovering via Gist & ntfy...' });
+    clearCustomBackendUrl();
+    setBackendInput('');
+
+    const reg = await fetchServerRegistry(true);
+    setIsTestingUrl(false);
+
+    if (reg?.url) {
+      setActiveBackendUrl(reg.url);
+      setServerHealth({
+        status: reg.ready ? 'online' : 'booting',
+        message: reg.ready ? '✓ Auto-connected & Ready' : `✓ Auto-connected (${reg.stepDisplay})`,
+      });
+      Alert.alert('Discovered', `Connected to live tunnel:\n${reg.url}`);
+    } else {
+      setActiveBackendUrl('');
+      setServerHealth({ status: 'offline', message: 'No active server found' });
+      Alert.alert('Offline', 'No active Kaggle server detected.');
+    }
+  };
 
   const handleClearAll = () => {
     Alert.alert(
@@ -136,6 +228,71 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
               );
             })}
+          </View>
+        {/* ─── Backend Server Connection ───────────────────────── */}
+        <View style={styles.card}>
+          <SectionTitle icon={Server}>Backend Server & Kaggle GPU</SectionTitle>
+          <Text style={styles.cardDescription}>
+            Connect directly to an active Kaggle GPU kernel via its Cloudflare tunnel URL, or let the app auto-discover via Gist and ntfy.
+          </Text>
+
+          {/* Current URL & Health Badge */}
+          <View style={styles.serverStatusCard}>
+            <View style={styles.serverStatusRow}>
+              <View style={[
+                styles.serverStatusDot,
+                serverHealth.status === 'online' && styles.serverStatusDotOnline,
+                serverHealth.status === 'booting' && styles.serverStatusDotBooting,
+                serverHealth.status === 'offline' && styles.serverStatusDotOffline,
+              ]} />
+              <Text style={styles.serverStatusTitle}>
+                {serverHealth.status === 'online' ? 'Connected (Dual T4 GPU)' : serverHealth.status === 'booting' ? 'Server Initializing' : 'Server Offline'}
+              </Text>
+            </View>
+            <Text style={styles.serverStatusMessage}>{serverHealth.message}</Text>
+            {activeBackendUrl ? (
+              <Text style={styles.serverActiveUrlText} numberOfLines={1}>
+                {activeBackendUrl}
+              </Text>
+            ) : null}
+          </View>
+
+          {/* Manual URL Input */}
+          <View style={styles.serverInputGroup}>
+            <Text style={styles.serverInputLabel}>Custom / Live Tunnel URL</Text>
+            <TextInput
+              style={styles.serverTextInput}
+              placeholder="https://xxx-xxx.trycloudflare.com"
+              placeholderTextColor={colors.textMuted}
+              value={backendInput}
+              onChangeText={setBackendInput}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+
+          {/* Action Buttons */}
+          <View style={styles.serverBtnRow}>
+            <TouchableOpacity
+              style={[styles.serverSaveBtn, isTestingUrl && styles.btnDisabled]}
+              onPress={handleSaveBackend}
+              disabled={isTestingUrl}
+            >
+              {isTestingUrl ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.serverSaveBtnText}>Test & Connect</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.serverAutoBtn, isTestingUrl && styles.btnDisabled]}
+              onPress={handleAutoDiscover}
+              disabled={isTestingUrl}
+            >
+              <RefreshCw size={13} color={colors.brand} strokeWidth={2.2} />
+              <Text style={styles.serverAutoBtnText}>Auto-Discover</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -335,5 +492,106 @@ const styles = StyleSheet.create({
   infoText: {
     ...typography.bodySmall,
     lineHeight: 20,
+  },
+
+  // Backend Server Connection Card Styles
+  serverStatusCard: {
+    backgroundColor: colors.surfaceSunken,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 4,
+  },
+  serverStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  serverStatusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.textMuted,
+  },
+  serverStatusDotOnline: {
+    backgroundColor: colors.accent || '#10b981',
+  },
+  serverStatusDotBooting: {
+    backgroundColor: '#f59e0b',
+  },
+  serverStatusDotOffline: {
+    backgroundColor: colors.danger || '#ef4444',
+  },
+  serverStatusTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  serverStatusMessage: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    lineHeight: 16,
+  },
+  serverActiveUrlText: {
+    fontSize: 11,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    color: colors.brand,
+    marginTop: 2,
+  },
+  serverInputGroup: {
+    gap: 6,
+  },
+  serverInputLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  serverTextInput: {
+    height: 40,
+    backgroundColor: colors.surfaceRaised || '#FFFFFF',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    paddingHorizontal: 12,
+    fontSize: 13,
+    color: colors.textPrimary,
+  },
+  serverBtnRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  serverSaveBtn: {
+    flex: 1,
+    height: 40,
+    backgroundColor: colors.brand,
+    borderRadius: radii.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  serverSaveBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  serverAutoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 40,
+    paddingHorizontal: 14,
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+  },
+  serverAutoBtnText: {
+    color: colors.brand,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  btnDisabled: {
+    opacity: 0.6,
   },
 });

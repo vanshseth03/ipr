@@ -15,12 +15,97 @@ export const isLocalhost = typeof window !== 'undefined'
   ? (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   : true;
 
-// Fallback URL (will be overwritten by Gist registry)
+// Fallback URL (will be overwritten by Gist registry, custom override, or ntfy discovery)
 let _resolvedBackendUrl = '';
 let _serverReady = false;
 let _serverStatus = 'unknown'; // 'unknown' | 'loading' | 'running' | 'offline'
 let _lastRegistryCheck = 0;
-const REGISTRY_CACHE_MS = 10000; // Re-check registry every 10s
+const REGISTRY_CACHE_MS = 8000; // Re-check registry every 8s
+
+/**
+ * Get manually configured or custom backend URL from localStorage.
+ */
+export function getCustomBackendUrl() {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      return (window.localStorage.getItem('ayush_custom_server_url') || '').trim();
+    } catch (_) {}
+  }
+  return '';
+}
+
+/**
+ * Set custom backend URL manually from UI (e.g. from Kaggle output console).
+ */
+export function setCustomBackendUrl(url) {
+  const clean = (url || '').trim().replace(/\/$/, '').replace(/\/api$/, '');
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      if (clean) {
+        window.localStorage.setItem('ayush_custom_server_url', clean);
+        window.localStorage.setItem('ayush_last_server_url', clean);
+      } else {
+        window.localStorage.removeItem('ayush_custom_server_url');
+      }
+    } catch (_) {}
+  }
+  _resolvedBackendUrl = clean;
+  _lastRegistryCheck = 0;
+  return clean;
+}
+
+/**
+ * Clear custom backend URL and reset to automatic discovery.
+ */
+export function clearCustomBackendUrl() {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      window.localStorage.removeItem('ayush_custom_server_url');
+    } catch (_) {}
+  }
+  _resolvedBackendUrl = '';
+  _serverReady = false;
+  _serverStatus = 'unknown';
+  _lastRegistryCheck = 0;
+}
+
+/**
+ * Probe a candidate URL directly against /api/health with a short timeout.
+ * Returns health object if reachable, or null.
+ */
+export async function probeUrlHealth(candidateUrl, timeoutMs = 2500) {
+  if (!candidateUrl) return null;
+  const cleanUrl = candidateUrl.trim().replace(/\/$/, '').replace(/\/api$/, '');
+  if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) return null;
+
+  try {
+    const ctrl = new AbortController();
+    const tId = setTimeout(() => ctrl.abort(), timeoutMs);
+    const resp = await fetch(`${cleanUrl}/api/health`, {
+      signal: ctrl.signal,
+      headers: {
+        'Bypass-Tunnel-Reminder': 'true',
+        'bypass-tunnel-reminder': '1',
+      },
+    });
+    clearTimeout(tId);
+
+    if (resp.ok) {
+      const data = await resp.json();
+      const isReady = !!data.ready;
+      return {
+        url: cleanUrl,
+        ready: isReady,
+        status: isReady ? 'running' : 'booting',
+        step: data.step || (isReady ? 'ready' : 'loading_weights'),
+        stepDisplay: data.step_display || (isReady ? 'All models ready' : 'Loading model weights into GPU...'),
+        models: data.models,
+        gpu: data.gpu,
+      };
+    }
+  } catch (_) {}
+  return null;
+}
 
 export async function markGitRegistryOffline() {
   try {
@@ -87,14 +172,45 @@ export async function fetchServerRegistry(forceFresh = false) {
       return { url: _resolvedBackendUrl, status: _serverStatus, ready: _serverReady };
     }
 
+    // ── Tier 1: User-defined Custom URL, Cached Live URL, or Env URL ──
+    const customUrl = getCustomBackendUrl();
+    const lastCachedUrl = typeof window !== 'undefined' && window.localStorage
+      ? (window.localStorage.getItem('ayush_last_server_url') || '').trim()
+      : '';
+    const envUrl = (process.env.EXPO_PUBLIC_API_URL || '').replace(/\/api\/?$/, '').trim();
+
+    const priorityCandidates = [
+      customUrl,
+      _resolvedBackendUrl,
+      lastCachedUrl,
+      envUrl,
+    ].filter((u) => u && (u.startsWith('http://') || u.startsWith('https://')));
+
+    const uniquePriority = [...new Set(priorityCandidates)];
+    for (const cand of uniquePriority) {
+      const probe = await probeUrlHealth(cand, 2000);
+      if (probe) {
+        _resolvedBackendUrl = probe.url;
+        _serverReady = probe.ready;
+        _serverStatus = probe.status;
+        _lastRegistryCheck = now;
+        if (typeof window !== 'undefined' && window.localStorage) {
+          try {
+            window.localStorage.setItem('ayush_last_server_url', probe.url);
+          } catch (_) {}
+        }
+        return probe;
+      }
+    }
+
     let registry = null;
 
-    // Strategy 0: Cloud Serverless API (/api/status & /api/server/status) — Central API for Web & Mobile
+    // ── Tier 2: Cloud Serverless API (/api/status & /api/server/status) ──
     for (const statusPath of [`${CLOUD_API_BASE}/api/status`, `${CLOUD_API_BASE}/api/server/status`]) {
       if (registry?.server_url) break;
       try {
         const cCtrl = new AbortController();
-        const cTimer = setTimeout(() => cCtrl.abort(), 3000);
+        const cTimer = setTimeout(() => cCtrl.abort(), 2500);
         const cResp = await fetch(statusPath, {
           signal: cCtrl.signal,
           headers: { 'User-Agent': 'AYUSH-IPR-Guardian' },
@@ -103,23 +219,24 @@ export async function fetchServerRegistry(forceFresh = false) {
         if (cResp.ok) {
           const cData = await cResp.json();
           if (cData?.server_url) {
-            registry = {
-              server_url: cData.server_url,
-              status: cData.status || 'running',
-              started_at: cData.started_at || new Date().toISOString(),
-            };
-          } else if (cData?.status === 'booting') {
-            _serverStatus = 'booting';
+            const probe = await probeUrlHealth(cData.server_url, 2500);
+            if (probe) {
+              _resolvedBackendUrl = probe.url;
+              _serverReady = probe.ready;
+              _serverStatus = probe.status;
+              _lastRegistryCheck = now;
+              return probe;
+            }
           }
         }
       } catch (_) {}
     }
 
-    // Strategy 1: Local daemon (ONLY on localhost — strictly disabled on Vercel to avoid loopback CORS block)
+    // ── Tier 3: Local Daemon (port 3333, localhost only) ──
     if (isLocalhost && !registry?.server_url) {
       try {
         const dCtrl = new AbortController();
-        const dTimer = setTimeout(() => dCtrl.abort(), 1500);
+        const dTimer = setTimeout(() => dCtrl.abort(), 1200);
         const dResp = await fetch(DAEMON_STATUS_URL, {
           signal: dCtrl.signal,
           headers: { 'User-Agent': 'AYUSH-IPR-Guardian' },
@@ -128,21 +245,24 @@ export async function fetchServerRegistry(forceFresh = false) {
         if (dResp.ok) {
           const dData = await dResp.json();
           if (dData?.server_url) {
-            registry = {
-              server_url: dData.server_url,
-              status: dData.status || 'running',
-              started_at: new Date().toISOString(),
-            };
+            const probe = await probeUrlHealth(dData.server_url, 2000);
+            if (probe) {
+              _resolvedBackendUrl = probe.url;
+              _serverReady = probe.ready;
+              _serverStatus = probe.status;
+              _lastRegistryCheck = now;
+              return probe;
+            }
           }
         }
       } catch (_) {}
     }
 
-    // Strategy 2: GitHub Gist API (only attach Authorization if GITHUB_TOKEN is present to prevent 401)
+    // ── Tier 4: GitHub Gist API & Raw Gist ──
     if (!registry?.server_url) {
       try {
         const gCtrl = new AbortController();
-        const gTimer = setTimeout(() => gCtrl.abort(), 3500);
+        const gTimer = setTimeout(() => gCtrl.abort(), 3000);
         const gHeaders = { 'User-Agent': 'AYUSH-IPR-Guardian' };
         if (GITHUB_TOKEN) {
           gHeaders['Authorization'] = `Bearer ${GITHUB_TOKEN}`;
@@ -163,11 +283,10 @@ export async function fetchServerRegistry(forceFresh = false) {
       } catch (_) {}
     }
 
-    // Strategy 3: GitHub Gist raw URL (unauthenticated, zero rate-limit)
     if (!registry?.server_url) {
       try {
         const rCtrl = new AbortController();
-        const rTimer = setTimeout(() => rCtrl.abort(), 3500);
+        const rTimer = setTimeout(() => rCtrl.abort(), 3000);
         const rawResp = await fetch(`${GIST_RAW_URL}?_t=${Date.now()}`, {
           signal: rCtrl.signal,
           cache: 'no-cache',
@@ -179,168 +298,70 @@ export async function fetchServerRegistry(forceFresh = false) {
       } catch (_) {}
     }
 
-    // Strategy 4: Fallback to ntfy.sh tunnel broadcast (immune to lack of Gist tokens)
-    if (!registry?.server_url) {
-      try {
-        const nCtrl = new AbortController();
-        const nTimer = setTimeout(() => nCtrl.abort(), 3500);
-        const nResp = await fetch('https://ntfy.sh/ayush_ipr_tunnel_sih2026/json?poll=1', {
-          signal: nCtrl.signal,
-          headers: { 'User-Agent': 'AYUSH-IPR-Guardian' },
-        });
-        clearTimeout(nTimer);
-        if (nResp.ok) {
-          const text = await nResp.text();
-          const lines = text.split('\n').filter(Boolean);
-          for (let i = lines.length - 1; i >= 0; i--) {
-            try {
-              const item = JSON.parse(lines[i]);
+    if (registry?.server_url) {
+      const probe = await probeUrlHealth(registry.server_url, 3000);
+      if (probe) {
+        _resolvedBackendUrl = probe.url;
+        _serverReady = probe.ready;
+        _serverStatus = probe.status;
+        _lastRegistryCheck = now;
+        return probe;
+      }
+    }
+
+    // ── Tier 5: Multi-Candidate ntfy.sh Tunnel Discovery ──
+    try {
+      const nCtrl = new AbortController();
+      const nTimer = setTimeout(() => nCtrl.abort(), 3500);
+      const nResp = await fetch('https://ntfy.sh/ayush_ipr_tunnel_sih2026/json?poll=1', {
+        signal: nCtrl.signal,
+        headers: { 'User-Agent': 'AYUSH-IPR-Guardian' },
+        cache: 'no-cache',
+      });
+      clearTimeout(nTimer);
+
+      if (nResp.ok) {
+        const text = await nResp.text();
+        const lines = text.split('\n').filter(Boolean);
+        const candidates = [];
+        const minValidTime = (now / 1000) - (4 * 3600); // within last 4 hours
+
+        for (let i = lines.length - 1; i >= 0; i--) {
+          try {
+            const item = JSON.parse(lines[i]);
+            const itemTime = item.time || 0;
+            if (itemTime >= minValidTime) {
               const match = (item.message || '').match(/(https:\/\/[a-z0-9-]+\.trycloudflare\.com)/i);
-              if (match) {
-                registry = {
-                  server_url: match[1],
-                  status: 'running',
-                  started_at: item.time ? new Date(item.time * 1000).toISOString() : new Date().toISOString(),
-                };
-                break;
+              if (match && !candidates.includes(match[1])) {
+                candidates.push(match[1]);
               }
-            } catch (_) {}
+            }
+          } catch (_) {}
+        }
+
+        // Test candidates in reverse order (newest first)
+        for (const candUrl of candidates) {
+          const probe = await probeUrlHealth(candUrl, 2500);
+          if (probe) {
+            _resolvedBackendUrl = probe.url;
+            _serverReady = probe.ready;
+            _serverStatus = probe.status;
+            _lastRegistryCheck = now;
+            if (typeof window !== 'undefined' && window.localStorage) {
+              try {
+                window.localStorage.setItem('ayush_last_server_url', probe.url);
+              } catch (_) {}
+            }
+            return probe;
           }
         }
-      } catch (_) {}
-    }
+      }
+    } catch (_) {}
 
     _lastRegistryCheck = now;
-
-    if (registry?.server_url && (registry.status === 'running' || registry.status === 'booting')) {
-      const cleanUrl = registry.server_url.replace(/\/$/, '');
-
-      // Check expiry first
-      const expires = new Date(registry.expires_at);
-      if (!isNaN(expires.getTime()) && expires < new Date() && registry.status === 'running') {
-        console.warn('[Registry] Server record expired. Nullifying Git registry.');
-        _serverStatus = 'offline';
-        _serverReady = false;
-        _resolvedBackendUrl = '';
-        await markGitRegistryOffline();
-        return { url: '', status: 'offline', ready: false, needRepush: true };
-      }
-
-      // ALWAYS ping /api/health FIRST to acknowledge whether server is ACTUALLY present!
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 4000);
-        const healthResp = await fetch(`${cleanUrl}/api/health`, {
-          signal: controller.signal,
-          headers: {
-            'Bypass-Tunnel-Reminder': 'true',
-            'bypass-tunnel-reminder': '1',
-          },
-        });
-        clearTimeout(timeoutId);
-
-        if (healthResp.ok) {
-          const health = await healthResp.json();
-          _resolvedBackendUrl = cleanUrl;
-          _serverReady = !!health.ready;
-          _serverStatus = _serverReady ? 'running' : 'booting';
-          return {
-            url: cleanUrl,
-            status: _serverStatus,
-            ready: _serverReady,
-            step: health.step || (_serverReady ? 'ready' : 'loading_weights'),
-            stepDisplay: health.step_display || (_serverReady ? 'All models ready' : 'Loading model weights into GPU...'),
-            models: health.models,
-            gpu: health.gpu,
-          };
-        }
-      } catch (pingErr) {
-        console.warn(`[Registry] Health ping failed for ${cleanUrl}:`, pingErr.message);
-      }
-
-      // If health ping failed for cleanUrl, check if ntfy has a fresher live tunnel!
-      try {
-        const nCtrl = new AbortController();
-        const nTimer = setTimeout(() => nCtrl.abort(), 3000);
-        const nResp = await fetch('https://ntfy.sh/ayush_ipr_tunnel_sih2026/json?poll=1', { signal: nCtrl.signal });
-        clearTimeout(nTimer);
-        if (nResp.ok) {
-          const text = await nResp.text();
-          const lines = text.split('\n').filter(Boolean);
-          for (let i = lines.length - 1; i >= 0; i--) {
-            try {
-              const item = JSON.parse(lines[i]);
-              const match = (item.message || '').match(/(https:\/\/[a-z0-9-]+\.trycloudflare\.com)/i);
-              if (match && match[1] !== cleanUrl) {
-                const altUrl = match[1];
-                const altCtrl = new AbortController();
-                const altTimer = setTimeout(() => altCtrl.abort(), 3500);
-                const altResp = await fetch(`${altUrl}/api/health`, {
-                  signal: altCtrl.signal,
-                  headers: { 'Bypass-Tunnel-Reminder': 'true' },
-                });
-                clearTimeout(altTimer);
-                if (altResp.ok) {
-                  const altHealth = await altResp.json();
-                  _resolvedBackendUrl = altUrl;
-                  _serverReady = !!altHealth.ready;
-                  _serverStatus = _serverReady ? 'running' : 'booting';
-                  return {
-                    url: altUrl,
-                    status: _serverStatus,
-                    ready: _serverReady,
-                    step: altHealth.step || (_serverReady ? 'ready' : 'loading_weights'),
-                    stepDisplay: altHealth.step_display || (_serverReady ? 'All models ready' : 'Loading model weights into GPU...'),
-                    models: altHealth.models,
-                    gpu: altHealth.gpu,
-                  };
-                }
-              }
-            } catch (_) {}
-          }
-        }
-      } catch (_) {}
-
-      // If health ping failed:
-      // Even if Git showed not expired, acknowledge that server is NOT present!
-      if (registry.status === 'running') {
-        console.warn('[Registry] Server marked running in Git failed /api/health! Nullifying Git and marking repush needed.');
-        await markGitRegistryOffline();
-        _serverStatus = 'offline';
-        _serverReady = false;
-        _resolvedBackendUrl = '';
-        return { url: '', status: 'offline', ready: false, needRepush: true };
-      }
-
-      // If status is booting, allow at most 60s for Cloudflare tunnel DNS propagation
-      const startedAt = new Date(registry.started_at);
-      const bootAgeMs = !isNaN(startedAt.getTime()) ? (Date.now() - startedAt.getTime()) : 999999;
-      if (bootAgeMs > 60 * 1000) {
-        console.warn(`[Registry] Server booting for > 60s (${Math.round(bootAgeMs/1000)}s) without responding to /api/health. Nullifying Gist and marking repush needed.`);
-        await markGitRegistryOffline();
-        _serverStatus = 'offline';
-        _serverReady = false;
-        _resolvedBackendUrl = '';
-        return { url: '', status: 'offline', ready: false, needRepush: true };
-      }
-
-      // Kernel just booted and tunnel URL is registered; tunnel is establishing (within 60s window)
-      _resolvedBackendUrl = cleanUrl;
-      _serverStatus = 'booting';
-      _serverReady = false;
-      return {
-        url: cleanUrl,
-        status: 'booting',
-        ready: false,
-        step: 'tunnel_pending',
-        stepDisplay: 'Connecting to Cloudflare tunnel...',
-      };
-    }
-
-    _serverStatus = registry?.status || 'offline';
+    _serverStatus = 'offline';
     _serverReady = false;
-    _resolvedBackendUrl = '';
-    return { url: '', status: _serverStatus, ready: false, needRepush: true };
+    return { url: '', status: 'offline', ready: false, needRepush: true };
   } catch (err) {
     console.warn('[Registry] Fetch failed:', err.message);
     return null;
@@ -542,19 +563,27 @@ export async function fetchCloudServerStatus() {
  */
 export async function waitForServer(onStatus) {
   const pollInterval = 1500;
-  let activeUrl = _resolvedBackendUrl;
+  let activeUrl = getCustomBackendUrl() || _resolvedBackendUrl;
   let healthFailCount = 0;
 
   while (true) {
     invalidateRegistryCache();
 
-    // 1. If we don't have a URL yet, query Git Gist to acquire the tunnel URL
+    // Check if user set or changed custom backend URL in UI
+    const customNow = getCustomBackendUrl();
+    if (customNow && customNow !== activeUrl) {
+      activeUrl = customNow;
+      _resolvedBackendUrl = customNow;
+      healthFailCount = 0;
+    }
+
+    // 1. If we don't have an active URL yet, query multi-tier registry
     if (!activeUrl) {
       if (onStatus) {
         onStatus({
           ready: false,
           step: 'kernel_booting',
-          message: 'Starting Kaggle GPU kernel — waiting for Cloudflare tunnel URL...',
+          message: 'Connecting to Kaggle GPU kernel — waiting for Cloudflare tunnel URL...',
           url: '',
         });
       }
@@ -579,19 +608,18 @@ export async function waitForServer(onStatus) {
             return activeUrl;
           }
         }
-      } catch (gistErr) {
-        console.warn('[waitForServer] Gist poll note:', gistErr.message);
+      } catch (err) {
+        console.warn('[waitForServer] Discovery note:', err.message);
       }
 
       await new Promise((r) => setTimeout(r, pollInterval));
       continue;
     }
 
-    // 2. We have the tunnel URL! Webpage stays in continuous loop with /api/health
-    // which exploits current boot state: loading_rag_db, loading_embeddings, building_index, loading_reranker, loading_llm, ready
+    // 2. We have a candidate URL! Continuously poll /api/health
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
       const resp = await fetch(`${activeUrl}/api/health`, {
         signal: controller.signal,
         headers: {
@@ -604,12 +632,13 @@ export async function waitForServer(onStatus) {
       if (resp.ok) {
         healthFailCount = 0;
         const health = await resp.json();
-        const step = health.step || (health.ready ? 'ready' : 'loading_weights');
-        const stepMsg = health.step_display || (health.ready ? 'All models loaded. AI Legal Advisory ready!' : 'Loading model weights into GPU...');
+        const isReady = !!health.ready;
+        const step = health.step || (isReady ? 'ready' : 'loading_weights');
+        const stepMsg = health.step_display || (isReady ? 'All models loaded. AI Legal Advisory ready!' : 'Loading model weights into GPU...');
 
         if (onStatus) {
           onStatus({
-            ready: !!health.ready,
+            ready: isReady,
             step,
             message: stepMsg,
             url: activeUrl,
@@ -618,11 +647,16 @@ export async function waitForServer(onStatus) {
           });
         }
 
-        // When ready === true, exit loop and return URL!
-        if (health.ready) {
+        // When ready === true, server is operational!
+        if (isReady) {
           _serverStatus = 'running';
           _serverReady = true;
           _resolvedBackendUrl = activeUrl;
+          if (typeof window !== 'undefined' && window.localStorage) {
+            try {
+              window.localStorage.setItem('ayush_last_server_url', activeUrl);
+            } catch (_) {}
+          }
           return activeUrl;
         }
       } else {
@@ -638,13 +672,11 @@ export async function waitForServer(onStatus) {
       }
     } catch (e) {
       healthFailCount++;
-      // If URL fails health check 3 consecutive times (DNS dead or container terminated), clear it immediately!
-      if (healthFailCount >= 3) {
-        console.warn(`[waitForServer] URL ${activeUrl} failed health check 3 times. Clearing dead URL and resetting Gist.`);
+      // If candidate fails 5 consecutive times, check for a fresher tunnel
+      if (healthFailCount >= 5) {
+        console.warn(`[waitForServer] URL ${activeUrl} failed health check 5 times. Probing alternatives.`);
         activeUrl = '';
-        _resolvedBackendUrl = '';
         healthFailCount = 0;
-        await markGitRegistryOffline();
       } else {
         try {
           const fresh = await fetchServerRegistry(true);

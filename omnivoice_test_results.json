@@ -1,0 +1,62 @@
+[
+  {
+    "id": "hi_devanagari",
+    "name": "Hindi (Devanagari Script)",
+    "language": "hi",
+    "status_code": 200,
+    "content_type": "audio/wav",
+    "latency_s": 1.46,
+    "server_gen_ms": "1051",
+    "wav_bytes": 329804,
+    "duration_s": 6.87,
+    "channels": 1,
+    "framerate_hz": 24000,
+    "is_valid_wav": true,
+    "saved_to": "C:\\Users\\sange\\OneDrive\\Desktop\\random ideas\\projectSIH\\test_omnivoice_hindi.wav"
+  },
+  {
+    "id": "hi_romanized",
+    "name": "Hindi (Romanized Hinglish Transliteration)",
+    "language": "hi",
+    "status_code": 200,
+    "content_type": "audio/wav",
+    "latency_s": 1.4,
+    "server_gen_ms": "856",
+    "wav_bytes": 271244,
+    "duration_s": 5.65,
+    "channels": 1,
+    "framerate_hz": 24000,
+    "is_valid_wav": true,
+    "saved_to": "C:\\Users\\sange\\OneDrive\\Desktop\\random ideas\\projectSIH\\test_omnivoice_roman_hindi.wav"
+  },
+  {
+    "id": "en_legal",
+    "name": "English (Statutory Legal Response with Indian Accent)",
+    "language": "en",
+    "status_code": 200,
+    "content_type": "audio/wav",
+    "latency_s": 2.01,
+    "server_gen_ms": "1190",
+    "wav_bytes": 499244,
+    "duration_s": 10.4,
+    "channels": 1,
+    "framerate_hz": 24000,
+    "is_valid_wav": true,
+    "saved_to": "C:\\Users\\sange\\OneDrive\\Desktop\\random ideas\\projectSIH\\test_omnivoice_english.wav"
+  },
+  {
+    "id": "ta_regional",
+    "name": "Tamil (Regional Indic Language)",
+    "language": "ta",
+    "status_code": 200,
+    "content_type": "audio/wav",
+    "latency_s": 1.12,
+    "server_gen_ms": "731",
+    "wav_bytes": 241964,
+    "duration_s": 5.04,
+    "channels": 1,
+    "framerate_hz": 24000,
+    "is_valid_wav": true,
+    "saved_to": "C:\\Users\\sange\\OneDrive\\Desktop\\random ideas\\projectSIH\\test_omnivoice_tamil.wav"
+  }
+]

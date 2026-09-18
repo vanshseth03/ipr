@@ -311,24 +311,6 @@ export function useVoiceSession() {
     }
   };
 
-  const _browserTTSFallback = (text) => {
-    if (typeof window === 'undefined' || !window.speechSynthesis) {
-      if (isActiveRef.current) startRecording();
-      return;
-    }
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text.substring(0, 300));
-    utterance.lang = 'en-IN';
-    utterance.rate = 1.0;
-    utterance.onend = () => {
-      if (isActiveRef.current) startRecording();
-    };
-    utterance.onerror = () => {
-      if (isActiveRef.current) startRecording();
-    };
-    window.speechSynthesis.speak(utterance);
-  };
-
   // ── Connect: start the voice session loop ──
   const connect = useCallback(() => {
     setError(null);
@@ -363,11 +345,6 @@ export function useVoiceSession() {
         audioRef.current.pause();
         audioRef.current = null;
       } catch {}
-    }
-
-    // Stop browser TTS
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
     }
 
     setStatus(VOICE_STATES.IDLE);

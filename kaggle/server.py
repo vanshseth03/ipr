@@ -564,11 +564,16 @@ class LLMManager:
                     turn = f"User: {user_message}\n\nInstruction: Translate the previous response to English faithfully. Do not add new topics."
                 messages.append({"role": "user", "content": turn})
             elif is_out_of_domain:
-                turn = f"{system_prompt}\n\nUser: {user_message}\n\nThis is off-topic. Politely say you only advise on AYUSH medicine and IP law in 1-2 sentences."
+                turn = f"{system_prompt}\n\nUser: {user_message}\n\nThis is off-topic. Politely state you only advise on AYUSH medicine and IP law in 1-2 sentences. Do not fabricate any AYUSH connection."
                 messages.append({"role": "user", "content": turn})
             else:
-                # Core instruction — concise, no boilerplate
-                combined = f"{system_prompt}\n\nUser Question: {user_message}\n\nAnswer the question directly. Use your own words — do not copy text verbatim from context."
+                combined = (
+                    f"{system_prompt}\n\n"
+                    f"User Question: {user_message}\n\n"
+                    f"INSTRUCTION: Answer the User Question directly and faithfully following the Core Operating Directives above. "
+                    f"If the question is meaningless, gibberish, or off-topic, decline strictly as instructed. "
+                    f"If valid, explain the AYUSH and legal assessment in your own words without copying text verbatim."
+                )
                 messages.append({"role": "user", "content": combined})
         else:
             if not messages:
@@ -721,7 +726,7 @@ class OmniVoiceTTSManager:
         print(f"  Loading OmniVoice TTS on {device}...", flush=True)
         vram_report("pre-omnivoice")
 
-        # Download model files with wget (bypasses HF library hang on Kaggle)
+        # Download model files with verification (prevents corrupted or 0-byte cache)
         ov_dir = "/kaggle/working/omnivoice_model"
         ov_audio_dir = os.path.join(ov_dir, "audio_tokenizer")
         os.makedirs(ov_audio_dir, exist_ok=True)
@@ -738,19 +743,72 @@ class OmniVoiceTTSManager:
             ("audio_tokenizer/preprocessor_config.json", ov_audio_dir),
         ]
 
-        hf_header = f"Authorization: Bearer {HF_TOKEN}" if HF_TOKEN else ""
+        min_sizes = {
+            "config.json": 200,
+            "model.safetensors": 2_000_000_000,
+            "tokenizer.json": 1_000_000,
+            "tokenizer_config.json": 200,
+            "chat_template.jinja": 50,
+            "audio_tokenizer/config.json": 100,
+            "audio_tokenizer/model.safetensors": 600_000_000,
+            "audio_tokenizer/preprocessor_config.json": 100,
+        }
+
+        # Check if all files already exist and meet minimum sizes
+        all_cached = True
         for fname, dest_dir in files_to_download:
             basename = fname.split("/")[-1]
             dest_path = os.path.join(dest_dir, basename)
-            if os.path.exists(dest_path):
-                print(f"    [cached] {fname}", flush=True)
-                continue
-            url = f"{HF_BASE}/{fname}"
-            print(f"    [downloading] {fname}...", flush=True)
-            header_arg = f'--header="{hf_header}"' if hf_header else ""
-            ret = os.system(f'wget -q --timeout=60 --tries=3 {header_arg} -O "{dest_path}" "{url}"')
-            if ret != 0:
-                os.system(f'wget --timeout=60 --tries=3 {header_arg} -O "{dest_path}" "{url}"')
+            req_size = min_sizes.get(fname, 50)
+            if not os.path.exists(dest_path) or os.path.getsize(dest_path) < req_size:
+                all_cached = False
+                break
+
+        if not all_cached:
+            # 1. Try snapshot_download first
+            snap_ok = False
+            try:
+                from huggingface_hub import snapshot_download
+                print("    Downloading OmniVoice via huggingface_hub snapshot_download...", flush=True)
+                snapshot_download(
+                    "k2-fsa/OmniVoice",
+                    local_dir=ov_dir,
+                    resume_download=True,
+                    token=HF_TOKEN or None
+                )
+                # Verify downloaded files
+                snap_ok = all(
+                    os.path.exists(os.path.join(dest_dir, fname.split("/")[-1])) and
+                    os.path.getsize(os.path.join(dest_dir, fname.split("/")[-1])) >= min_sizes.get(fname, 50)
+                    for fname, dest_dir in files_to_download
+                )
+                if snap_ok:
+                    print("    ✓ OmniVoice snapshot_download succeeded and verified", flush=True)
+            except Exception as snap_err:
+                print(f"    snapshot_download note: {snap_err}, using verified direct download...", flush=True)
+
+            # 2. Fallback to robust direct wget/curl with size validation
+            if not snap_ok:
+                hf_header = f'--header="Authorization: Bearer {HF_TOKEN}"' if HF_TOKEN else ""
+                for fname, dest_dir in files_to_download:
+                    basename = fname.split("/")[-1]
+                    dest_path = os.path.join(dest_dir, basename)
+                    req_size = min_sizes.get(fname, 50)
+                    if os.path.exists(dest_path) and os.path.getsize(dest_path) >= req_size:
+                        print(f"    [cached] {fname} ({os.path.getsize(dest_path)/(1024*1024):.1f}MB)", flush=True)
+                        continue
+                    if os.path.exists(dest_path):
+                        try:
+                            os.remove(dest_path)
+                        except Exception:
+                            pass
+                    url = f"{HF_BASE}/{fname}"
+                    print(f"    [downloading] {fname}...", flush=True)
+                    ret = os.system(f'wget -c -q --timeout=300 --tries=5 {hf_header} -O "{dest_path}" "{url}"')
+                    if ret != 0 or not os.path.exists(dest_path) or os.path.getsize(dest_path) < req_size:
+                        print(f"    ... retrying with curl: {fname}", flush=True)
+                        curl_hdr = f'-H "Authorization: Bearer {HF_TOKEN}"' if HF_TOKEN else ""
+                        os.system(f'curl -L -C - --retry 3 --connect-timeout 30 {curl_hdr} -o "{dest_path}" "{url}"')
 
         # Heartbeat during model load
         _done = threading.Event()
@@ -770,7 +828,6 @@ class OmniVoiceTTSManager:
                 device_map=device,
                 dtype=torch.float16
             )
-            # Direct inference mode (torch.compile on wrapper causes 'does not support len()')
             print("    OmniVoice: loaded in native fp16 inference mode", flush=True)
 
             self.loaded = True
@@ -786,10 +843,20 @@ class OmniVoiceTTSManager:
                     denoise=False, preprocess_prompt=False, postprocess_output=False,
                 )
                 with torch.inference_mode():
-                    _ = self.model.generate(text="Hello.", generation_config=warmup_config)
-                print("    OmniVoice warm-up done", flush=True)
+                    _ = self.model.generate(
+                        text="नमस्ते, OmniVoice तैयार है।",
+                        language="Hindi",
+                        generation_config=warmup_config
+                    )
+                print("    OmniVoice warm-up done (Hindi + English verified)", flush=True)
             except Exception as e:
-                print(f"    OmniVoice warm-up skipped: {e}", flush=True)
+                print(f"    OmniVoice warm-up fallback: {e}", flush=True)
+                try:
+                    with torch.inference_mode():
+                        _ = self.model.generate(text="Hello.")
+                    print("    OmniVoice default warm-up succeeded", flush=True)
+                except Exception as e2:
+                    print(f"    OmniVoice warm-up skipped: {e2}", flush=True)
 
             return True
         except Exception as e:
@@ -829,31 +896,44 @@ class OmniVoiceTTSManager:
 
         # 2. Detect language (native scripts + language codes)
         lang_str = str(language or "").lower()
+        instruct_to_use = None
+
         if any('\u0900' <= ch <= '\u097f' for ch in clean) or lang_str in ("hi", "hindi", "hi-in"):
             clean = _romanized_hindi_to_devanagari(clean)
             target_lang = "Hindi"
+            instruct_to_use = None  # Native acoustic prior for pure authentic Hindi
         elif any('\u0B80' <= ch <= '\u0BFF' for ch in clean) or lang_str in ("ta", "tamil", "ta-in"):
             target_lang = "Tamil"
+            instruct_to_use = None
         elif any('\u0C00' <= ch <= '\u0C7F' for ch in clean) or lang_str in ("te", "telugu", "te-in"):
             target_lang = "Telugu"
+            instruct_to_use = None
         elif any('\u0980' <= ch <= '\u09FF' for ch in clean) or lang_str in ("bn", "bengali", "bn-in"):
             target_lang = "Bengali"
+            instruct_to_use = None
         elif any('\u0A80' <= ch <= '\u0AFF' for ch in clean) or lang_str in ("gu", "gujarati", "gu-in"):
             target_lang = "Gujarati"
+            instruct_to_use = None
         elif any('\u0C80' <= ch <= '\u0CFF' for ch in clean) or lang_str in ("kn", "kannada", "kn-in"):
             target_lang = "Kannada"
+            instruct_to_use = None
         elif any('\u0D00' <= ch <= '\u0D7F' for ch in clean) or lang_str in ("ml", "malayalam", "ml-in"):
             target_lang = "Malayalam"
+            instruct_to_use = None
         elif any('\u0A00' <= ch <= '\u0A7F' for ch in clean) or lang_str in ("pa", "punjabi", "pa-in"):
             target_lang = "Punjabi"
+            instruct_to_use = None
         elif lang_str in ("mr", "marathi", "mr-in"):
             clean = _romanized_hindi_to_devanagari(clean)
             target_lang = "Marathi"
+            instruct_to_use = None
         elif is_hindi_query(clean):
             clean = _romanized_hindi_to_devanagari(clean)
             target_lang = "Hindi"
+            instruct_to_use = None
         else:
             target_lang = "English"
+            instruct_to_use = self.instruct
 
         # 3. Split long text into natural sentence batches (~300-400 chars) for stable neural synthesis
         sentences = re.split(r'(?<=[.!?।])\s+', clean)
@@ -910,15 +990,38 @@ class OmniVoiceTTSManager:
         silence_gap = np.zeros(int(sr * 0.25), dtype=np.float32)  # 250ms natural breath pause
 
         for idx, batch_text in enumerate(batches):
-            audio_result = self.model.generate(
-                text=batch_text,
-                language=target_lang,
-                generation_config=gen_config,
-                speed=self.generation_speed,
-            )
+            try:
+                gen_kwargs = {
+                    "text": batch_text,
+                    "language": target_lang,
+                    "generation_config": gen_config,
+                    "speed": self.generation_speed,
+                }
+                if instruct_to_use:
+                    gen_kwargs["instruct"] = instruct_to_use
 
-            # Convert to numpy float32 1D
-            if isinstance(audio_result, torch.Tensor):
+                audio_result = self.model.generate(**gen_kwargs)
+            except Exception as gen_err:
+                print(f"    OmniVoice generate with config failed ({gen_err}), retrying standard call...", flush=True)
+                audio_result = self.model.generate(
+                    text=batch_text,
+                    language=target_lang,
+                    speed=self.generation_speed,
+                )
+
+            # Convert to numpy float32 1D safely on CPU
+            if isinstance(audio_result, (list, tuple)):
+                if len(audio_result) > 0:
+                    item = audio_result[0]
+                    if isinstance(item, torch.Tensor):
+                        audio_np = item.detach().cpu().float().numpy()
+                    elif isinstance(item, np.ndarray):
+                        audio_np = item.astype(np.float32)
+                    else:
+                        audio_np = np.array(item, dtype=np.float32)
+                else:
+                    audio_np = np.array([], dtype=np.float32)
+            elif isinstance(audio_result, torch.Tensor):
                 audio_np = audio_result.detach().cpu().float().numpy()
             elif isinstance(audio_result, np.ndarray):
                 audio_np = audio_result.astype(np.float32)
@@ -1087,87 +1190,115 @@ def is_hindi_query(text: str) -> bool:
     return len(matches) >= 2 or (len(words) <= 6 and len(matches) >= 1)
 
 
-SYSTEM_PROMPT_EN = """You are AYUSH-IPR GUARDIAN, an expert AI legal advisor for Indian Traditional Medicine (AYUSH) and Intellectual Property Law.
+SYSTEM_PROMPT_EN = """You are AYUSH-IPR GUARDIAN, an authoritative AI legal advisor exclusively specialized in Indian Traditional Medicine (AYUSH: Ayurveda, Yoga & Naturopathy, Unani, Siddha, Sowa-Rigpa, Homoeopathy) and Intellectual Property Rights (IPR: Patents Act 1970, Drugs & Cosmetics Act 1940, Biological Diversity Act 2002, TKDL).
 
-CORE RULES — FOLLOW STRICTLY:
-0. AUTONOMOUS CONTEXT RELEVANCE GATE (DECIDE BEFORE RESPONDING):
-   Before generating your response, internally evaluate:
-   a) Does the STATUTORY CONTEXT below actually help answer the user's specific query?
-   b) If NO (the query is a greeting, asking who you are / your identity, conversational small talk, or if the retrieved statutory chunks are unrelated to what the user asked):
-      -> COMPLETELY IGNORE the STATUTORY CONTEXT. Do NOT cite legal sections, do NOT reference statutory articles, and do NOT force legal jargon into greetings or identity replies. Provide a direct, natural, conversational response as AYUSH-IPR GUARDIAN.
-   c) If YES (the query specifically asks about formulation patentability, Section 3(p), classical texts, D&C Act, TKDL, shelf-life, GMP, etc.):
-      -> Synthesize and apply the STATUTORY CONTEXT to deliver an authoritative legal assessment with precise citations.
-   Make this decision autonomously on every single query without requiring user confirmation.
+CORE OPERATING DIRECTIVES — STRICT COMPLIANCE REQUIRED:
+0. RIGID SCOPE & INTEGRITY BOUNDARIES:
+   - ZERO TOLERANCE FOR GIBBERISH OR KEYBOARD SMASHES: If the user input is meaningless random characters (e.g. 'vbhkjfdnrrrkfds', 'fsfdsfsese'), scrambled keystrokes, repetitive letters, or unintelligible words:
+     * NEVER attempt to guess what they mean.
+     * NEVER assume they want advice on Ayurvedic medicine, patents, or formulations.
+     * NEVER say "It seems you're interested in..." or "Based on what we discussed earlier...".
+     * NEVER apologize for unrelated statutes like the Food Safety and Standards Act.
+     * NEVER use past conversation history to invent a context.
+     * Respond ONLY with:
+       "I could not understand your input. Please enter a valid question related to AYUSH traditional medicine or intellectual property (IPR) law."
+   - REJECT OFF-TOPIC & BASELESS QUERIES: If the user asks about unrelated topics (e.g. general politics, politicians, celebrities, sports, coding, cooking, personal queries, or random phrases like 'MODI MODI MODI'):
+     * Do NOT fabricate an AYUSH connection.
+     * State clearly and politely in 1-2 sentences that the topic is outside your jurisdiction and invite them to ask an AYUSH or patent law question.
+   - CONVERSATION HISTORY RESTRICTION: Use previous conversation history ONLY when the user asks a genuine, coherent follow-up question (e.g. "can you elaborate on Section 3(p)?", "what about dosage?"). NEVER use previous history to answer a random keystroke, gibberish, or an unrelated topic.
 
-1. SYNTHESIZE, DON'T COPY: Read the STATUTORY CONTEXT below and explain the answer IN YOUR OWN WORDS. Never copy-paste raw text from the context. Understand it, then explain it naturally like a knowledgeable lawyer talking to someone.
-2. NEVER HALLUCINATE REFERENCES: Do NOT say "see illustration", "refer to figure", "as shown in the diagram", "see table" or reference any visual element. There are no illustrations, figures, tables, or diagrams available. If you catch yourself about to reference one — STOP and rephrase.
+1. AUTONOMOUS STATUTORY CONTEXT EVALUATION:
+   - If the STATUTORY CONTEXT below contains relevant legal provisions or TKDL citations answering the user's specific query:
+     Synthesize and explain the legal reasoning IN YOUR OWN WORDS. Deliver an authoritative assessment with statutory citations.
+   - If the STATUTORY CONTEXT is empty or irrelevant:
+     Do NOT fabricate patent claims, do NOT cite nonexistent sections, do NOT cite unrelated acts (e.g. Food Safety and Standards Act), and do NOT pretend you have specific prior art evidence. Answer only using established statutory principles if the query is in-domain, or ask for specific formulation details.
+   - NEVER copy raw text verbatim. Explain it like an expert patent attorney explaining to an innovator.
+
+2. NEVER HALLUCINATE REFERENCES:
+   Do NOT say "see illustration", "refer to figure", "as shown in the diagram", "see table" or reference any visual elements. No illustrations, figures, or diagrams exist.
+
 3. MATCH RESPONSE LENGTH TO QUESTION:
-   - Simple factual question ("what is section 3p?") → 2-4 sentences, crisp and direct.
-   - Analytical question ("can I patent turmeric?") → 1-2 focused paragraphs with relevant legal reasoning.
-   - Complex multi-part question → detailed structured response with clear sections.
-   - NEVER pad short answers with filler. NEVER truncate complex answers.
-4. ONLY CITE WHAT'S RELEVANT: Mention legal sections only when they directly answer the question. Do NOT force-cite unrelated sections just to appear thorough.
-5. STAY IN YOUR LANE: You advise on AYUSH traditional medicine + Indian IP law. If a question is off-topic (coding, sports, general knowledge), politely say so in 1-2 sentences and redirect.
-6. RESPOND IN USER'S LANGUAGE: Match the language the user writes in — English, Hindi, Tamil, etc.
-7. VERIFY PROBLEM STATEMENT (PS) GOAL: Conclude every legal/patent evaluation with a clear, definitive verdict:
-   - Clear Patentability Verdict: Whether the formulation/invention is barred (§3(p) TK bar), patentable, or conditionally patentable.
-   - Statutory Grounds: Exact statutory provisions (§3(p), §3(j), §3(e) synergistic combination, §3(d) efficacy).
-   - Actionable Pathway: Specific technical or regulatory steps needed (e.g. empirical synergy data proving synergy index > 1, novel formulation process, NBA Form 1 approval).
+   - Simple factual question ("what is section 3p?") -> 2-4 sentences, crisp and direct.
+   - Analytical question ("can I patent turmeric and ginger?") -> 1-2 focused paragraphs with legal reasoning.
+   - Complex multi-part question -> structured response with clear headings.
+   - NEVER pad short answers with filler.
 
-PRECEDENT RULES (use only when relevant):
-- Turmeric Patent Revocation: USPTO Patent 5,401,504 revoked 1997, CSIR challenge citing Charaka Samhita & Sushruta Samhita.
-- Neem Patent Revocation: EPO Patent 436,257 revoked 2000.
-- Divya Pharmacy v. Union of India (2018 Uttarakhand HC): ONLY about Biological Diversity Act 2002 §7 & §21 (benefit sharing). NOT about turmeric patents.
-- Novartis v. Union of India (2013 SC): ONLY about Section 3(d) therapeutic efficacy.
+4. ACCURATE PRECEDENTS (CITE ONLY WHEN DIRECTLY RELEVANT):
+   - Turmeric Patent Revocation: USPTO Patent 5,401,504 revoked 1997 upon CSIR challenge citing Charaka Samhita & Sushruta Samhita.
+   - Neem Patent Revocation: EPO Patent 436,257 revoked 2000.
+   - Divya Pharmacy v. Union of India (2018 Uttarakhand HC): ONLY about Biological Diversity Act 2002 §7 & §21 (fair and equitable benefit sharing). NOT about turmeric patents.
+   - Novartis v. Union of India (2013 SC): ONLY about Section 3(d) therapeutic efficacy standards.
 
-LEGAL TOOLKIT (cite only what's relevant to the question):
-- Patentability: Patents Act 1970 §3(p), §3(j), §3(d), §3(e)
-- International: PCT, Paris Convention, §39 Foreign Filing License, TKDL
-- Regulatory: D&C Act 1940, Schedule T GMP, Rule 161B, NBA approvals
+5. VERDICT STRUCTURE FOR PATENT INQUIRIES:
+   When evaluating a formulation, conclude with:
+   - Verdict: Barred under §3(p) TK bar, conditionally patentable with empirical synergy, or patentable.
+   - Statutory Grounds: Exact sections (§3(p), §3(j), §3(d), §3(e)).
+   - Actionable Pathway: Specific technical or regulatory steps needed (synergy testing, NBA Form 1 approval, Rule 161B shelf-life data).
 
-End legal evaluations with: "Disclaimer: This is statutory information, not formal legal advice. Consult a patent attorney for filing."
+6. LANGUAGE CONGRUENCE: Always respond in the language used by the user (English, Hindi, etc.).
+
+End legal evaluations with: "Disclaimer: This is statutory information, not formal legal advice. Consult a registered patent attorney for filing."
 
 STATUTORY CONTEXT:
 {context}"""
 
 
-SYSTEM_PROMPT_HI = """आप AYUSH-IPR GUARDIAN हैं — भारतीय पारंपरिक चिकित्सा (AYUSH) और बौद्धिक संपदा कानून के विशेषज्ञ AI कानूनी सलाहकार।
+SYSTEM_PROMPT_HI = """आप AYUSH-IPR GUARDIAN हैं — भारतीय पारंपरिक चिकित्सा (AYUSH: आयुर्वेद, योग, यूनानी, सिद्ध, सोवा-रिग्पा, होम्योपैथी) और बौद्धिक संपदा कानून (Patents Act 1970, Drugs & Cosmetics Act 1940, Biological Diversity Act 2002, TKDL) के आधिकारिक AI कानूनी सलाहकार।
 
-मुख्य नियम — सख्ती से पालन करें:
-0. आंतरिक संदर्भ प्रासंगिकता निर्णय (उत्तर देने से पहले स्वयं तय करें):
-   हर उत्तर से पहले आंतरिक रूप से जांचें:
-   क) क्या नीचे दिया गया वैधानिक संदर्भ (STATUTORY CONTEXT) इस विशिष्ट प्रश्न का उत्तर देने में वास्तव में काम आता है?
-   ख) यदि नहीं (प्रश्न परिचय 'आप कौन हैं', अभिवादन 'नमस्ते', सामान्य बातचीत, या संदर्भ से असंबंधित विषय है):
-      -> वैधानिक संदर्भ को पूरी तरह अनदेखा करें। अभिवादन या सामान्य बातचीत में धाराएं या कानूनी संदर्भ जबरन न थोपें। सीधा, विनम्र और स्वाभाविक उत्तर दें।
-   ग) यदि हां (प्रश्न पारंपरिक चिकित्सा, पेटेंट योग्यता, धारा 3(p), नियम, या विनियामक अनुपालन पर है):
-      -> वैधानिक संदर्भ का उपयोग करके सटीक विश्लेषण और प्रासंगिक उद्धरण दें।
-   यह निर्णय आपको स्वयं लेना है, किसी अलग पुष्टि की आवश्यकता नहीं है।
+मुख्य परिचालन निर्देश — अनिवार्य एवं सख्त अनुपालन:
+0. विषय-सीमा एवं सत्यनिष्ठा की सीमा:
+   - निरर्थक (Gibberish) या कीबोर्ड-स्मैश पर शून्य सहनशीलता: यदि उपयोगकर्ता का इनपुट बिना अर्थ के यादृच्छिक अक्षरों (जैसे 'vbhkjfdnrrrkfds', 'fsfdsfsese'), अस्पष्ट अक्षरों, या बेसिर-पैर का है:
+     * कभी भी अर्थ निकालने का अनुमान न लगाएं।
+     * कभी भी मनगढ़ंत आयुष संदर्भ न जोड़ें।
+     * कभी भी "ऐसा लगता है कि आप रुचि रखते हैं" या "जैसा कि हमने पहले चर्चा की" जैसे अनुमान न लगाएं।
+     * कभी भी खाद्य सुरक्षा अधिनियम जैसे असंबंधित कानूनों का हवाला न दें।
+     * पुरानी चैट के आधार पर कोई कानूनी सलाह न बनाएं।
+     * केवल यह उत्तर दें:
+       "मुझे आपका इनपुट समझ नहीं आया। कृपया आयुष (पारंपरिक चिकित्सा) या बौद्धिक संपदा (IPR) कानून से संबंधित कोई स्पष्ट प्रश्न पूछें।"
+   - विषय-बाह्य (Off-Topic) और निराधार प्रश्नों को अस्वीकार करें: यदि प्रश्न आयुष और पेटेंट कानून के दायरे से बाहर है (जैसे राजनीति, नेता, अभिनेता, खेल, कोडिंग, सामान्य गपशप, या 'MODI MODI MODI' जैसे दोहराव वाले शब्द):
+     * किसी आयुष विषय से जबरन न जोड़ें।
+     * 1-2 स्पष्ट एवं विनम्र वाक्यों में कहें कि यह विषय आपके कार्यक्षेत्र से बाहर है और उन्हें आयुष या पेटेंट संबंधी प्रश्न पूछने के लिए कहें।
+   - चैट इतिहास का सीमित उपयोग: पिछली चैट का उपयोग केवल तभी करें जब उपयोगकर्ता कोई वास्तविक अनुवर्ती (follow-up) प्रश्न पूछे (उदा. "धारा 3(p) को और विस्तार से समझाएं")। किसी यादृच्छिक शब्द या असंबंधित प्रश्न के लिए चैट इतिहास का उपयोग न करें।
 
-1. अपने शब्दों में समझाएं: नीचे दिए गए वैधानिक संदर्भ को पढ़ें और अपने शब्दों में समझाकर उत्तर दें। कच्चा पाठ कॉपी-पेस्ट न करें।
-2. कभी काल्पनिक संदर्भ न दें: "चित्र देखें", "तालिका देखें", "आरेख में दिखाया गया" कभी न कहें। कोई चित्र, तालिका, या आरेख उपलब्ध नहीं है।
-3. उत्तर की लंबाई प्रश्न के अनुसार रखें:
-   - सरल प्रश्न → 2-4 वाक्य, स्पष्ट और सीधे।
-   - विश्लेषणात्मक प्रश्न → 1-2 केंद्रित अनुच्छेद।
-   - जटिल बहु-भागीय प्रश्न → विस्तृत संरचित उत्तर।
-4. केवल प्रासंगिक धाराएं बताएं। असंबंधित धाराएं जबरन न थोपें।
-5. उपयोगकर्ता जिस भाषा में लिखे उसी में उत्तर दें।
-6. समस्या विवरण (PS) लक्ष्य का सत्यापन: प्रत्येक मूल्यांकन को स्पष्ट निष्कर्ष पर समाप्त करें — क्या आविष्कार वर्जित है या पेटेंट योग्य, कौन सी धारा लागू होती है, और आगे क्या प्रमाण (उदा. सिनर्जी डेटा, NBA अनुमोदन) आवश्यक हैं।
+1. वैधानिक संदर्भ का स्वायत्त मूल्यांकन:
+   - यदि नीचे दिए गए वैधानिक संदर्भ (STATUTORY CONTEXT) में प्रश्न का उत्तर देने वाली प्रासंगिक कानूनी धाराएं हैं:
+     कानूनी तर्क को अपने शब्दों में समझाएं और सटीक धाराएं उद्धृत करें।
+   - यदि वैधानिक संदर्भ रिक्त या अप्रासंगिक है:
+     काल्पनिक पेटेंट दावे या मनगढ़ंत धाराएं न बनाएं। केवल स्थापित कानूनी सिद्धांतों के आधार पर मार्गदर्शन दें, या फॉर्मूलेशन का स्पष्ट विवरण मांगें।
+   - कच्चा पाठ कॉपी-पेस्ट न करें; एक अनुभवी कानूनी विशेषज्ञ की भांति समझाएं।
 
-नज़ीरें (केवल प्रासंगिक होने पर):
-- हल्दी पेटेंट निरस्तीकरण: USPTO पेटेंट 5,401,504, 1997 में CSIR द्वारा चरक संहिता के आधार पर रद्द।
-- दिव्या फार्मेसी (2018): केवल जैव विविधता अधिनियम §7 व §21 — हल्दी पेटेंट से असंबंधित।
-- नोवार्टिस (2013): केवल धारा 3(d) उपचारात्मक प्रभावकारिता।
+2. कभी काल्पनिक संदर्भ न दें: "चित्र देखें", "तालिका देखें", "आरेख देखें" कभी न कहें। कोई चित्र या तालिका उपलब्ध नहीं है।
 
-कानूनी उपकरण (केवल प्रासंगिक का उपयोग करें):
-- पेटेंट योग्यता: §3(p), §3(j), §3(d), §3(e)
-- अंतरराष्ट्रीय: PCT, पेरिस कन्वेंशन, §39
-- विनियामक: D&C Act 1940, शेड्यूल T, नियम 161B, NBA
+3. उत्तर की लंबाई प्रश्न के अनुरूप रखें:
+   - सरल प्रश्न -> 2-4 वाक्य, स्पष्ट और सीधे।
+   - विश्लेषणात्मक प्रश्न -> 1-2 केंद्रित अनुच्छेद।
+   - जटिल प्रश्न -> संरचित बिंदुवार उत्तर।
 
-अंत में: "अस्वीकरण: यह वैधानिक जानकारी है, औपचारिक कानूनी सलाह नहीं। पेटेंट अटॉर्नी से परामर्श करें।"
+4. उपयोगकर्ता जिस भाषा (हिंदी/अंग्रेजी) में लिखे, उसी भाषा में उत्तर दें।
+
+5. पेटेंट योग्यता मूल्यांकन का निष्कर्ष:
+   - स्पष्ट निष्कर्ष: धारा 3(p) पारंपरिक ज्ञान के तहत वर्जित, या सिनर्जी प्रमाण के साथ सशर्त पेटेंट योग्य।
+   - लागू धाराएं: (§3(p), §3(j), §3(d), §3(e))।
+   - आगे का वैधानिक मार्ग: सिनर्जी डेटा, NBA प्रपत्र 1 अनुमोदन, नियम 161B आदि।
+
+अंत में: "अस्वीकरण: यह वैधानिक जानकारी है, औपचारिक कानूनी सलाह नहीं। पेटेंट फाइलिंग हेतु पंजीकृत पेटेंट एजेंट से परामर्श करें।"
 
 वैधानिक संदर्भ:
 {context}"""
 
+
+GIBBERISH_RESPONSE_EN = (
+    "I could not understand your input. It appears to be unrecognized, scrambled, or meaningless text.\n\n"
+    "Please ask a clear, specific question regarding AYUSH traditional medicine formulations, "
+    "patentability (e.g., Section 3(p) traditional knowledge, Section 3(d) efficacy, Section 3(e) synergy), "
+    "TKDL prior art, or regulatory compliance under the Drugs & Cosmetics Act."
+)
+
+GIBBERISH_RESPONSE_HI = (
+    "मुझे आपका इनपुट समझ नहीं आया। यह कोई अस्पष्ट, निरर्थक या यादृच्छिक टेक्स्ट प्रतीत होता है।\n\n"
+    "कृपया आयुष (पारंपरिक चिकित्सा) फॉर्मूलेशन, पेटेंट योग्यता (जैसे धारा 3(p) पारंपरिक ज्ञान, धारा 3(d), धारा 3(e)), "
+    "TKDL पूर्व कला, या औषधि एवं प्रसाधन सामग्री अधिनियम के तहत विनियामक अनुपालन से संबंधित कोई स्पष्ट प्रश्न पूछें।"
+)
 
 OUT_OF_DOMAIN_RESPONSE_HI = (
     "यह प्रश्न पारंपरिक चिकित्सा (AYUSH) या बौद्धिक संपदा कानून के कार्यक्षेत्र से असंबंधित है।\n\n"
@@ -1199,15 +1330,148 @@ def format_statutory_context(context_text: str, is_hi: bool = False) -> str:
             return f"\nवैधानिक संदर्भ (Statutory Reference):\n{context_text.strip()}\n"
         return f"\nSTATUTORY CONTEXT (Operative Reference):\n{context_text.strip()}\n"
     if is_hi:
-        return "\nवैधानिक मार्गदर्शन:\nइस विशिष्ट प्रश्न के लिए कोई असंबंधित धारा न जोड़ें। केवल पेटेंट अधिनियम 1970 और औषधि एवं प्रसाधन सामग्री अधिनियम 1940 के स्थापित कानूनी सिद्धांतों के आधार पर सीधा मार्गदर्शन दें।\n"
-    return "\nSTATUTORY GUIDANCE:\nNo specific corpus record was directly matched. Provide advisory using established statutory provisions of the Patents Act, 1970 (e.g. §3(p), §3(d), §3(e), §3(j)) and Drugs & Cosmetics Act, 1940 without forcing unrelated statutes.\n"
+        return "\nवैधानिक संदर्भ:\nकोई विशिष्ट डेटाबेस रिकॉर्ड सीधे मेल नहीं खाता। यदि प्रश्न वैध आयुष विषय पर है, तो स्थापित कानूनी सिद्धांतों के आधार पर मार्गदर्शन दें। यदि प्रश्न अस्पष्ट या गैर-आयुष है, तो स्पष्टीकरण मांगें या अस्वीकार करें। मनगढ़ंत संदर्भ न जोड़ें।\n"
+    return "\nSTATUTORY CONTEXT:\nNo specific database record was matched for this query. If the inquiry is a legitimate AYUSH/IPR question, advise using established statutory principles (§3(p), §3(d), §3(e), §3(j)). If the inquiry is unclear or out of domain, politely request clarification or decline. Do NOT fabricate scenarios.\n"
+
+
+def is_gibberish_or_nonsense(query: str) -> bool:
+    """Detect meaningless keystrokes, keyboard smashes, consonant clusters with no vowels,
+    repeated character nonsense, or baseless unstructured inputs (e.g. 'VBHKJFDNRRRKFDS', 'FSFDSFSESE', 'MODI MODI MODI', 'asdfghjkl').
+    """
+    if not query or not query.strip():
+        return True
+    raw = query.strip()
+    cleaned = re.sub(r'[^\w\s\u0900-\u097F]', ' ', raw)
+    tokens = [t.strip() for t in cleaned.split() if t.strip()]
+    if not tokens:
+        return True
+
+    # Check 1: All tokens are symbols/numbers with zero letters or devanagari
+    has_letters = any(re.search(r'[a-zA-Z\u0900-\u097F]', t) for t in tokens)
+    if not has_letters:
+        return True
+
+    # Check 2: Single-word repetition spam (e.g. "MODI MODI MODI", "test test test")
+    unique_tokens = set(t.lower() for t in tokens)
+    if len(tokens) >= 3 and len(unique_tokens) == 1:
+        domain_essentials = {'patent', 'ayush', 'ayurveda', 'herb', 'medicine', 'turmeric', 'neem'}
+        if not any(t in domain_essentials for t in unique_tokens):
+            return True
+
+    ACRONYM_WHITELIST = {
+        'ayush', 'tkdl', 'csir', 'wipo', 'uspto', 'epo', 'nba', 'gmp', 'pct', 'abs',
+        'ccras', 'ccrum', 'ccrh', 'ccrs', 'fssai', 'who', 'ipr', 'ipo', 'nda', 'mou',
+        'bda', 'cgpdtm'
+    }
+
+    gibberish_token_count = 0
+    total_alpha_tokens = 0
+
+    for t in tokens:
+        tl = t.lower()
+        if any('\u0900' <= ch <= '\u097f' for ch in tl):
+            continue
+
+        alpha_chars = re.findall(r'[a-zA-Z]', tl)
+        if not alpha_chars:
+            continue
+        total_alpha_tokens += 1
+        word = ''.join(alpha_chars)
+
+        if word in ACRONYM_WHITELIST:
+            continue
+
+        # A: 4 or more identical letters in a row (e.g. aaaaa, zzzz, ddddd)
+        if re.search(r'([a-z])\1{3,}', word):
+            gibberish_token_count += 1
+            continue
+
+        # B: 5 or more consecutive consonants (e.g. bhkjfdnrrrkfds, fsfdsfsese, dfghjk)
+        if re.search(r'[bcdfghjklmnpqrstvwxz]{5,}', word) and word not in ('strengths', 'lengths'):
+            gibberish_token_count += 1
+            continue
+
+        # C: Length >= 5 with 0 vowels
+        vowels = [ch for ch in word if ch in 'aeiouy']
+        if len(word) >= 5 and len(vowels) == 0:
+            gibberish_token_count += 1
+            continue
+
+        # D: Repetition of small patterns (e.g. asdasd, fdsfds, abcabc)
+        if len(word) >= 6 and re.search(r'^(.{2,4})\1{2,}$', word):
+            gibberish_token_count += 1
+            continue
+
+        # E: QWERTY keyboard row smash substrings >= 5 chars
+        if any(smash in word for smash in ('asdfg', 'sdfgh', 'dfghj', 'ghjkl', 'qwerty', 'werty', 'zxcvb', 'xcvbn')):
+            gibberish_token_count += 1
+            continue
+
+    if total_alpha_tokens > 0 and gibberish_token_count == total_alpha_tokens:
+        return True
+    if total_alpha_tokens >= 2 and (gibberish_token_count / total_alpha_tokens) >= 0.5:
+        return True
+
+    return False
+
+
+def is_legitimate_followup(query: str, history: Optional[List[Dict]] = None) -> bool:
+    """Check if the query is a genuine follow-up / clarification to previous conversation context."""
+    if not history or len(history) == 0:
+        return False
+    if not query or not query.strip():
+        return False
+    if is_gibberish_or_nonsense(query):
+        return False
+
+    q = query.lower().strip()
+    words = q.split()
+    wc = len(words)
+
+    # Genuine follow-up phrases
+    followup_signals = [
+        'tell me more', 'more detail', 'explain further', 'elaborate', 'can you clarify',
+        'what about', 'how about', 'why is that', 'why does', 'how does', 'and then',
+        'continue', 'summarize', 'give examples', 'what else', 'is that all', 'next step',
+        'aur batao', 'aur samjhao', 'vistar se', 'aur jankari', 'kyun', 'kaise',
+        'iska kya matlab', 'iska matlab', 'aage batao', 'aur kuch', 'aur point',
+        'in hindi', 'in english', 'hindi me batao', 'english me batao'
+    ]
+
+    if any(sig in q for sig in followup_signals):
+        return True
+
+    # Short follow-up queries (<= 6 words) that start with interrogatives or conjunctions
+    if wc <= 6:
+        followup_starters = (
+            'why', 'how', 'what', 'can i', 'can we', 'does it', 'is it',
+            'kyun', 'kaise', 'kya', 'aur', 'lekin', 'toh'
+        )
+        if any(q.startswith(st) for st in followup_starters):
+            return True
+
+    return False
+
+
+def is_translation_request(query: str, history: Optional[List[Dict]] = None) -> bool:
+    """Check if the user is asking to translate the previous response."""
+    if not history or len(history) == 0:
+        return False
+    q = query.lower().strip()
+    words = q.split()
+    if len(words) > 6:
+        return False
+    trans_keywords = ['hindi', 'translate', 'translation', 'english', 'अनुवाद', 'हिंदी', 'अंग्रेजी']
+    return any(w in q for w in trans_keywords)
 
 
 def is_ayush_ipr_query(query: str) -> bool:
     """Determine whether the query pertains to AYUSH traditional medicine, intellectual property, or regulatory law.
-    Strictly filters out non-domain inquiries (e.g. computing, processors, physics, sports, coding).
+    Strictly filters out non-domain inquiries (e.g. computing, processors, politics, sports, coding).
     """
     if not query or not query.strip():
+        return False
+    if is_gibberish_or_nonsense(query):
         return False
     q = query.lower().strip()
 
@@ -1215,22 +1479,20 @@ def is_ayush_ipr_query(query: str) -> bool:
     if is_simple_greeting(q):
         return True
 
-    # High-confidence domain keywords & stems
-    domain_stems = [
+    # High-confidence unambiguous multi-char roots
+    unambiguous_stems = [
         # Patent & Intellectual Property
-        'patent', 'paten', 'patr', 'dhara', 'dhaara', 'adhiniyam', 'rule', 'act', 'sec', 'claim',
-        'tkdl', 'ipr', 'csir', 'nba', 'abs', 'wipo', 'ipo', 'uspto', 'epo', 'pct', 'trademark',
-        'copyright', 'infring', 'prior art', 'priorart', 'novel', 'invent', 'statut', 'regulat',
-        'compliance', 'pre-grant', 'post-grant', 'opposit', 'revoc', 'validity', 'invalid',
-        'first schedule', 'schedule t', 'rule 161', 'rule 158', 'section 3', 'section 25', 'section 39',
-        '3(p)', '3(d)', '3(e)', '3(j)', '3(h)', '3(i)', '3p', '3d', '3e', '3j', 'license', 'licen',
+        'patent', 'paten', 'patr', 'dhara', 'dhaara', 'adhiniyam', 'tkdl', 'ipr', 'csir', 'nba',
+        'wipo', 'ipo', 'uspto', 'pct', 'trademark', 'copyright', 'infring', 'prior art', 'priorart',
+        'pre-grant', 'post-grant', 'opposit', 'revoc', 'validity', 'invalid', 'first schedule',
+        'schedule t', 'rule 161', 'rule 158', 'section 3', 'section 25', 'section 39',
+        '3(p)', '3(d)', '3(e)', '3(j)', '3(h)', '3(i)', '3p', '3d', '3e', '3j', 'licens',
         # AYUSH Systems & Practice
         'ayush', 'ayur', 'unani', 'siddha', 'homeo', 'homoeo', 'sowa', 'yoga', 'naturopath',
         'treatise', 'samhita', 'nighantu', 'pharmacop', 'vaidya', 'hakim', 'kaviraj', 'nuskha',
         'charak', 'sushrut', 'ashtanga', 'bhavaprakasha', 'sharangadhara',
         # Botany, Herbs & Ingredients
-        'herb', 'plant', 'flora', 'botan', 'phyto', 'leaf', 'root', 'bark', 'seed', 'flower',
-        'podh', 'paudh', 'ped', 'jadi', 'buti', 'jadibut', 'vanaspati', 'extract', 'distill',
+        'botan', 'phyto', 'vanaspati', 'extract', 'distill', 'polyherbal',
         # Specific Herbs & Common Compounds
         'turmeric', 'haldi', 'haridra', 'curcumin', 'neem', 'nimba', 'tulsi', 'ashwagandh', 'amla',
         'amalaki', 'triphala', 'guduchi', 'giloy', 'brahmi', 'shatavari', 'shilajit', 'guggul',
@@ -1238,20 +1500,30 @@ def is_ayush_ipr_query(query: str) -> bool:
         'vati', 'ghrita', 'lepa', 'piperine', 'maricha', 'ginger', 'shunthi', 'boswellia',
         'shallaki', 'senna', 'isabgol', 'cardamom', 'cinnamon', 'clove', 'lavanga', 'aloe',
         # Formulations, Medicine, Health & Therapeutics
-        'formulat', 'composit', 'admix', 'synerg', 'efficac', 'bioavail', 'bioenhanc', 'medicin',
-        'drug', 'dawa', 'davai', 'dawai', 'aushadh', 'ilaj', 'upchar', 'disease', 'illness',
-        'remedy', 'cure', 'treatment', 'dosha', 'vata', 'pitta', 'kapha', 'prakriti', 'agni',
-        'ama', 'toxicity', 'safety', 'clinical', 'gmp', 'shelf life', 'expiration', 'heavy metal',
+        'formulat', 'composit', 'admix', 'synerg', 'efficac', 'bioavail', 'bioenhanc',
+        'aushadh', 'ilaj', 'upchar', 'disease', 'illness',
+        'dosha', 'vata', 'pitta', 'kapha', 'prakriti', 'agni',
+        'ama', 'toxicity', 'safety', 'clinical', 'shelf life', 'expiration', 'heavy metal',
         'ayush standard', 'ayush premium', 'co-extraction', 'carrier', 'excipient', 'adjuvant',
         'wound', 'fungicid', 'antidiabetic', 'antimicrobial', 'anti-inflammatory', 'immunity'
     ]
 
-    if any(stem in q for stem in domain_stems):
+    if any(stem in q for stem in unambiguous_stems):
         return True
+
+    # Short keywords with word boundary matching (prevents 'exact' matching 'act', 'pedestrian' matching 'ped')
+    bounded_words = [
+        'act', 'rule', 'sec', 'claim', 'herb', 'plant', 'flora', 'leaf', 'root', 'bark',
+        'seed', 'flower', 'paudh', 'podh', 'ped', 'jadi', 'buti', 'drug', 'dawa', 'davai',
+        'dawai', 'cure', 'remedy', 'gmp', 'abs', 'epo'
+    ]
+    for w in bounded_words:
+        if re.search(r'\b' + re.escape(w) + r'\b', q):
+            return True
 
     # Devanagari detection (Hindi domain terms)
     if any('\u0900' <= ch <= '\u097f' for ch in query):
-        hi_domain_terms = ['पेटेंट', 'आयुष', 'दवा', 'औषध', 'जड़ी', 'बूटी', 'रोग', 'उपचार', 'नियम', 'कानून', 'धारा', 'हल्दी', 'नीम', 'तुलसी', 'चूर्ण', 'रस', 'पादप', 'पौध']
+        hi_domain_terms = ['पेटेंट', 'आयुष', 'दवा', 'औषध', 'जड़ी', 'बूटी', 'रोग', 'उपचार', 'नियम', 'कानून', 'धारा', 'हल्दी', 'नीम', 'तुलसी', 'चूर्ण', 'रस', 'पादप', 'पौध', 'चरक', 'संहिता']
         if any(term in query for term in hi_domain_terms) or is_simple_greeting(q):
             return True
 
@@ -1404,7 +1676,19 @@ def rag_query(query: str, rag_db: RAGDatabase, llm: LLMManager, language: Option
     is_hi = language == "hi" or is_hindi_query(query)
     history_list = history or []
 
-    # Autonomous Gating Check 1: Greetings & Identity queries — bypass RAG completely at any turn
+    # Autonomous Gating Check 1: Gibberish, keystroke smashes & baseless strings — ALWAYS reject immediately
+    if is_gibberish_or_nonsense(query):
+        gib_ans = GIBBERISH_RESPONSE_HI if is_hi else GIBBERISH_RESPONSE_EN
+        return {
+            "query": query, "answer": gib_ans, "citations": [], "sources": [],
+            "metadata": {
+                "model": llm.model_name, "engine": getattr(llm, 'engine_type', 'fp16'),
+                "search_time_ms": 0, "generation_time_ms": 0, "total_time_ms": 0,
+                "sources_used": 0, "retrieval_method": "none (gibberish/nonsense rejected)",
+            }
+        }
+
+    # Autonomous Gating Check 2: Greetings & Identity queries — bypass RAG completely at any turn
     if is_greeting_or_identity(query):
         t1 = time.time()
         greet_prompt = (
@@ -1432,8 +1716,12 @@ def rag_query(query: str, rag_db: RAGDatabase, llm: LLMManager, language: Option
             }
         }
 
-    # Out-of-Domain Guardrail: Reject ALL non-AYUSH / non-legal questions immediately
-    if not is_ayush_ipr_query(query) and len(history_list) <= 1:
+    # Autonomous Gating Check 3: Out-of-Domain Guardrail — Reject non-AYUSH inquiries unless legitimate follow-up
+    is_domain = is_ayush_ipr_query(query)
+    is_followup = is_legitimate_followup(query, history_list)
+    is_translation = is_translation_request(query, history_list)
+
+    if not is_domain and not is_followup and not is_translation:
         ood_ans = OUT_OF_DOMAIN_RESPONSE_HI if is_hi else OUT_OF_DOMAIN_RESPONSE_EN
         return {
             "query": query, "answer": ood_ans, "citations": [], "sources": [],
@@ -1726,7 +2014,22 @@ async def chat_stream(req: ChatRequest, request: "starlette.requests.Request" = 
         for m in req.messages:
             history_dicts.append({"role": m.role, "content": m.content})
 
-    # Autonomous Gating Check 1: Greetings & Identity queries — bypass RAG completely at any turn
+    # Autonomous Gating Check 1: Gibberish, keystroke smashes & baseless strings — ALWAYS reject immediately
+    if is_gibberish_or_nonsense(req.query):
+        def stream_gibberish():
+            import json as _json
+            import time as _time
+            gib_ans = GIBBERISH_RESPONSE_HI if is_hi else GIBBERISH_RESPONSE_EN
+            yield f"data: {_json.dumps({'type': 'sources', 'sources': [], 'search_time_ms': 0})}\n\n"
+            words = gib_ans.split(" ")
+            for w in words:
+                _time.sleep(0.015)
+                yield f"data: {_json.dumps({'type': 'token', 'token': w + ' '})}\n\n"
+            yield f"data: {_json.dumps({'type': 'done'})}\n\n"
+
+        return StreamingResponse(stream_gibberish(), media_type="text/event-stream")
+
+    # Autonomous Gating Check 2: Greetings & Identity queries — bypass RAG completely at any turn
     if is_greeting_or_identity(req.query):
         def stream_greeting():
             import json as _json
@@ -1764,8 +2067,12 @@ async def chat_stream(req: ChatRequest, request: "starlette.requests.Request" = 
 
         return StreamingResponse(stream_greeting(), media_type="text/event-stream")
 
-    # Out-of-Domain Guardrail: Intercept strictly off-topic questions
-    if not is_ayush_ipr_query(req.query) and len(history_dicts) <= 1:
+    # Autonomous Gating Check 3: Out-of-Domain Guardrail — Reject non-AYUSH inquiries unless legitimate follow-up
+    is_domain = is_ayush_ipr_query(req.query)
+    is_followup = is_legitimate_followup(req.query, history_dicts)
+    is_translation = is_translation_request(req.query, history_dicts)
+
+    if not is_domain and not is_followup and not is_translation:
         def stream_out_of_domain():
             import json as _json
             import time as _time
@@ -2062,16 +2369,20 @@ async def shutdown_endpoint():
 
 def broadcast_tunnel_url(url: str):
     """Broadcast tunnel URL to cloud discovery endpoint so client app can auto-connect."""
-    try:
-        req = urllib.request.Request(
-            "https://ntfy.sh/ayush_ipr_tunnel_sih2026",
-            data=url.encode("utf-8"),
-            headers={"Title": "AYUSH-IPR Server Online", "Tags": "rocket"}
-        )
-        urllib.request.urlopen(req, timeout=5)
-        print(f"  [DISCOVERY] Broadcasted tunnel URL to discovery endpoint: {url}", flush=True)
-    except Exception as e:
-        print(f"  [DISCOVERY] Broadcast warning: {e}", flush=True)
+    for attempt in range(2):
+        try:
+            req = urllib.request.Request(
+                "https://ntfy.sh/ayush_ipr_tunnel_sih2026",
+                data=url.encode("utf-8"),
+                headers={"Title": "AYUSH-IPR Server Online", "Tags": "rocket"}
+            )
+            urllib.request.urlopen(req, timeout=5)
+            print(f"  [DISCOVERY] Broadcasted tunnel URL to discovery endpoint: {url}", flush=True)
+            break
+        except Exception as e:
+            if attempt == 1:
+                print(f"  [DISCOVERY] Broadcast warning: {e}", flush=True)
+            time.sleep(1)
     try:
         with open("/kaggle/working/tunnel_url.txt", "w") as f:
             f.write(url.strip())
@@ -2114,6 +2425,7 @@ def start_cloudflared_tunnel(port: int) -> str:
                     print(f"{'=' * 60}\n", flush=True)
                 print(f"  Health: {url}/api/health", flush=True)
                 print(f"  Chat:   POST {url}/api/chat", flush=True)
+                print(f"  👉 Direct Connect: Paste this URL in the app's Chat boot card or Settings to connect immediately!", flush=True)
                 broadcast_tunnel_url(url)
                 # Immediately push early booting URL to Gist registry so clients discover it in seconds!
                 try:

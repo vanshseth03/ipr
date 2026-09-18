@@ -24,8 +24,17 @@ export function useSpeak() {
         bn: 'bn-IN',
         en: 'en-IN',
       };
+      const isDevanagari = /[\u0900-\u097F]/.test(text);
+      const isTamil = /[\u0B80-\u0BFF]/.test(text);
+      const isTelugu = /[\u0C00-\u0C7F]/.test(text);
+      const isBengali = /[\u0980-\u09FF]/.test(text);
+
       const targetLang =
         options.language ||
+        (isDevanagari ? 'hi-IN' : null) ||
+        (isTamil ? 'ta-IN' : null) ||
+        (isTelugu ? 'te-IN' : null) ||
+        (isBengali ? 'bn-IN' : null) ||
         langMap[language] ||
         'en-IN';
 

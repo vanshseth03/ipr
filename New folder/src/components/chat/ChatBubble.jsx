@@ -1,17 +1,23 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { StyleSheet, Text, View, Animated, Easing, Platform, ActivityIndicator } from 'react-native';
-import { Leaf, Cpu, Clock, Info, Zap } from 'lucide-react-native';
+import { StyleSheet, Text, View, Animated, Easing, Platform, ActivityIndicator, TextInput, TouchableOpacity } from 'react-native';
+import { Leaf, Cpu, Clock, Info, Zap, Link2, CheckCircle2, ArrowRight } from 'lucide-react-native';
 import { colors, radii, spacing, typography } from '../../constants/theme';
+import { setCustomBackendUrl, probeUrlHealth } from '../../constants/config';
 
 /**
  * Server Boot & Model Loading Card
  * Displays animated loading spinner with live state text,
- * real-time seconds counter (up to ~250s), progress bar,
- * and transparent notice explaining the free Kaggle instance vs production.
+ * dynamic phase-aware seconds counter, progress bar,
+ * transparent notice explaining the free Kaggle instance vs production,
+ * and a direct "Paste Tunnel URL" override for running Kaggle instances.
  */
 function ServerBootCard({ step, stepDisplay, url }) {
   const pulseAnim = useRef(new Animated.Value(0.4)).current;
   const [seconds, setSeconds] = useState(0);
+  const [showDirectInput, setShowDirectInput] = useState(false);
+  const [customInput, setCustomInput] = useState('');
+  const [isConnectingCustom, setIsConnectingCustom] = useState(false);
+  const [customMessage, setCustomMessage] = useState({ text: '', isError: false });
 
   useEffect(() => {
     const pulse = Animated.loop(
@@ -33,40 +39,67 @@ function ServerBootCard({ step, stepDisplay, url }) {
     return () => clearInterval(timer);
   }, []);
 
-  const TOTAL_ESTIMATED_SECS = 250;
-  const progressPercent = Math.min(Math.round((seconds / TOTAL_ESTIMATED_SECS) * 100), 98);
-  const remainingSecs = Math.max(0, TOTAL_ESTIMATED_SECS - seconds);
-
-  // Interpret boot phase
-  let phaseTitle = 'Initializing AI Server';
+  // Interpret boot phase and dynamic time estimation
+  let TOTAL_ESTIMATED_SECS = 250;
+  let phaseTitle = 'Connecting to AI Server';
   let phaseBadge = 'Booting';
+
   if (step === 'loading_llm' || step?.includes('llm') || step?.includes('weight')) {
-    phaseTitle = 'Loading Model Weights';
+    phaseTitle = 'Kaggle GPU Active — Loading LLM Weights';
     phaseBadge = 'Gemma-2-2B-IT';
+    TOTAL_ESTIMATED_SECS = 45;
   } else if (step === 'loading_reranker') {
-    phaseTitle = 'Loading Cross-Encoder Reranker';
+    phaseTitle = 'Kaggle GPU Active — Loading Cross-Encoder';
     phaseBadge = 'BGE-Reranker-V2';
+    TOTAL_ESTIMATED_SECS = 30;
   } else if (step === 'building_index') {
-    phaseTitle = 'Building Hybrid Vector Index';
+    phaseTitle = 'Kaggle GPU Active — Building Vector Index';
     phaseBadge = 'FAISS + BM25';
+    TOTAL_ESTIMATED_SECS = 35;
   } else if (step === 'loading_embeddings') {
-    phaseTitle = 'Loading Embedding Model';
+    phaseTitle = 'Kaggle GPU Active — Loading Embedding Model';
     phaseBadge = 'BGE-M3';
+    TOTAL_ESTIMATED_SECS = 50;
   } else if (step === 'loading_rag_db') {
-    phaseTitle = 'Loading Statutory Database';
+    phaseTitle = 'Kaggle GPU Active — Loading Statutory Database';
     phaseBadge = '4,678 Records';
+    TOTAL_ESTIMATED_SECS = 20;
   } else if (step === 'tunnel_pending' || step === 'tunnel_warming' || step === 'tunnel_connecting') {
     phaseTitle = 'Cloudflare Tunnel Handshake';
     phaseBadge = 'trycloudflare.com';
+    TOTAL_ESTIMATED_SECS = 40;
   } else if (step === 'kernel_booting' || step === 'pushing') {
-    phaseTitle = 'Allocating Kaggle T4 GPU';
+    phaseTitle = 'Connecting to Kaggle T4 GPU';
     phaseBadge = 'Tesla T4 Dual';
+    TOTAL_ESTIMATED_SECS = 250;
   } else if (step === 'ready') {
     phaseTitle = 'Server Ready! Answering Question...';
     phaseBadge = 'Connected';
+    TOTAL_ESTIMATED_SECS = 5;
   }
 
+  const progressPercent = Math.min(Math.round((seconds / TOTAL_ESTIMATED_SECS) * 100), 98);
+  const remainingSecs = Math.max(0, TOTAL_ESTIMATED_SECS - seconds);
   const currentDisplay = stepDisplay || 'Loading model weights into GPU...';
+
+  const handleConnectCustom = async () => {
+    const raw = customInput.trim();
+    if (!raw) return;
+    setIsConnectingCustom(true);
+    setCustomMessage({ text: 'Validating server endpoint...', isError: false });
+
+    const probe = await probeUrlHealth(raw, 4000);
+    if (probe) {
+      setCustomBackendUrl(probe.url);
+      setCustomMessage({ text: '✓ Connected! Syncing chat stream...', isError: false });
+    } else {
+      setCustomMessage({
+        text: '✗ Could not reach /api/health at this URL. Ensure Kaggle cell printed the trycloudflare URL.',
+        isError: true,
+      });
+    }
+    setIsConnectingCustom(false);
+  };
 
   return (
     <View style={styles.bootCard}>
@@ -76,7 +109,7 @@ function ServerBootCard({ step, stepDisplay, url }) {
           <View style={styles.bootTimerBadge}>
             <Clock size={13} color={colors.brand} strokeWidth={2.5} />
             <Text style={styles.bootTimerCount}>{seconds}s</Text>
-            <Text style={styles.bootTimerTotal}>/ ~250s estimated</Text>
+            <Text style={styles.bootTimerTotal}>/ ~{TOTAL_ESTIMATED_SECS}s estimated</Text>
           </View>
           <Text style={styles.bootRemainingText}>
             {remainingSecs > 0 ? `~${remainingSecs}s remaining` : 'Finalizing connection...'}
@@ -111,6 +144,51 @@ function ServerBootCard({ step, stepDisplay, url }) {
           <Cpu size={12} color={colors.brand} strokeWidth={2} />
           <Text style={styles.bootChipText}>Kaggle Dual T4 (32GB VRAM)</Text>
         </View>
+      </View>
+
+      {/* Direct Connect Quick Action (Bypasses wait if Kaggle is already running) */}
+      <View style={styles.bootDirectBox}>
+        <TouchableOpacity
+          style={styles.bootDirectToggle}
+          onPress={() => setShowDirectInput((prev) => !prev)}
+          activeOpacity={0.7}
+        >
+          <Link2 size={13} color={colors.brand} strokeWidth={2} />
+          <Text style={styles.bootDirectToggleText}>
+            {showDirectInput ? 'Hide manual URL input' : 'Already running on Kaggle? Paste Tunnel URL'}
+          </Text>
+        </TouchableOpacity>
+
+        {showDirectInput && (
+          <View style={styles.bootDirectInputRow}>
+            <TextInput
+              style={styles.bootDirectTextInput}
+              placeholder="https://xxx-xxx.trycloudflare.com"
+              placeholderTextColor={colors.textMuted}
+              value={customInput}
+              onChangeText={setCustomInput}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TouchableOpacity
+              style={[styles.bootDirectBtn, isConnectingCustom && styles.bootDirectBtnDisabled]}
+              onPress={handleConnectCustom}
+              disabled={isConnectingCustom}
+            >
+              {isConnectingCustom ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.bootDirectBtnText}>Connect</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {customMessage.text ? (
+          <Text style={[styles.bootDirectMsg, customMessage.isError ? styles.bootDirectMsgError : styles.bootDirectMsgSuccess]}>
+            {customMessage.text}
+          </Text>
+        ) : null}
       </View>
 
       {/* Free Kaggle Instance vs Production Explanation */}
@@ -599,5 +677,71 @@ const styles = StyleSheet.create({
   bootBoldText: {
     fontWeight: '700',
     color: colors.textPrimary || colors.text,
+  },
+  bootDirectBox: {
+    width: '100%',
+    backgroundColor: colors.surfaceSunken,
+    borderRadius: radii.md,
+    padding: spacing.sm,
+    marginTop: spacing.xs,
+    marginBottom: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  bootDirectToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 2,
+  },
+  bootDirectToggleText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.brand,
+  },
+  bootDirectInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  bootDirectTextInput: {
+    flex: 1,
+    height: 36,
+    backgroundColor: colors.surfaceRaised || '#FFFFFF',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.sm,
+    paddingHorizontal: 10,
+    fontSize: 12,
+    color: colors.textPrimary,
+  },
+  bootDirectBtn: {
+    backgroundColor: colors.brand,
+    paddingHorizontal: 14,
+    height: 36,
+    borderRadius: radii.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bootDirectBtnDisabled: {
+    opacity: 0.6,
+  },
+  bootDirectBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  bootDirectMsg: {
+    fontSize: 11,
+    marginTop: 6,
+    lineHeight: 15,
+  },
+  bootDirectMsgSuccess: {
+    color: colors.accent || '#10b981',
+    fontWeight: '600',
+  },
+  bootDirectMsgError: {
+    color: colors.danger || '#ef4444',
   },
 });

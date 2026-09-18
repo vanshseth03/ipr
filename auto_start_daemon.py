@@ -16,7 +16,7 @@ import re
 import threading
 import subprocess
 import urllib.request
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 
@@ -433,7 +433,7 @@ def main():
     threading.Thread(target=discovery_loop, daemon=True).start()
 
     # Start HTTP trigger server
-    server = HTTPServer(("0.0.0.0", TRIGGER_PORT), TriggerHandler)
+    server = ThreadingHTTPServer(("0.0.0.0", TRIGGER_PORT), TriggerHandler)
     print(f"  [Trigger] Listening on port {TRIGGER_PORT}...\n", flush=True)
 
     try:
