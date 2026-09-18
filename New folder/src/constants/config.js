@@ -258,15 +258,15 @@ export async function fetchServerRegistry(forceFresh = false) {
       } catch (_) {}
     }
 
-    // ── Tier 4: GitHub Gist API & Raw Gist ──
-    if (!registry?.server_url) {
+    // ── Tier 4: GitHub Gist API (authenticated only to avoid 403) & Raw Gist ──
+    if (!registry?.server_url && GITHUB_TOKEN) {
       try {
         const gCtrl = new AbortController();
         const gTimer = setTimeout(() => gCtrl.abort(), 3000);
-        const gHeaders = { 'User-Agent': 'AYUSH-IPR-Guardian' };
-        if (GITHUB_TOKEN) {
-          gHeaders['Authorization'] = `Bearer ${GITHUB_TOKEN}`;
-        }
+        const gHeaders = {
+          'User-Agent': 'AYUSH-IPR-Guardian',
+          'Authorization': `Bearer ${GITHUB_TOKEN}`,
+        };
         const resp = await fetch(GIST_REGISTRY_URL, {
           signal: gCtrl.signal,
           headers: gHeaders,

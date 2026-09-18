@@ -71,6 +71,19 @@ module.exports = async function handler(req, res) {
               ready = !!healthData.ready;
               status = ready ? 'running' : 'booting';
               serverUrl = candidate;
+
+              // Auto-sync active tunnel to Gist so frontend gets it instantly
+              try {
+                const { updateGistRegistry } = require('./_kaggle');
+                await updateGistRegistry({
+                  server_url: candidate,
+                  status,
+                  started_at: healthData?.started_at || new Date().toISOString(),
+                  expires_at: new Date(Date.now() + 4 * 3600 * 1000).toISOString(),
+                  last_heartbeat: new Date().toISOString(),
+                  kaggle_kernel: 'vanshseth003/ayush-ipr-guardian',
+                });
+              } catch (_) {}
               break;
             }
           } catch (_) {}
