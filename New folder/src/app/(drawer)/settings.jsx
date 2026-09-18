@@ -229,6 +229,8 @@ export default function SettingsScreen() {
               );
             })}
           </View>
+        </View>
+
         {/* ─── Backend Server Connection ───────────────────────── */}
         <View style={styles.card}>
           <SectionTitle icon={Server}>Backend Server & Kaggle GPU</SectionTitle>

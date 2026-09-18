@@ -2,7 +2,7 @@ import urllib.request
 import json
 import time
 
-base_url = 'https://lock-innovative-regional-viii.trycloudflare.com'
+base_url = 'https://least-tall-continent-display.trycloudflare.com'
 
 # 1. Health check
 print('--- 1. Testing /api/health ---')

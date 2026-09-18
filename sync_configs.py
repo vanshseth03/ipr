@@ -1,7 +1,7 @@
 import re
 from pathlib import Path
 
-LIVE_URL = 'https://lock-innovative-regional-viii.trycloudflare.com'
+LIVE_URL = 'https://least-tall-continent-display.trycloudflare.com'
 root = Path(__file__).parent
 
 # 1. New folder/.env

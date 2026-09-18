@@ -8,7 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- STATE ---
   const state = {
-    baseUrl: 'https://lock-innovative-regional-viii.trycloudflare.com',
+    baseUrl: 'https://least-tall-continent-display.trycloudflare.com',
     bypassLocaltunnel: true,
     isConnected: false,
     ragDbRecords: [],

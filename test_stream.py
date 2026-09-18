@@ -5,7 +5,7 @@ import time
 
 sys.stdout.reconfigure(encoding='utf-8')
 
-base_url = 'https://lock-innovative-regional-viii.trycloudflare.com'
+base_url = 'https://least-tall-continent-display.trycloudflare.com'
 query = 'apko international patent law kebarein me ky lagta hai'
 payload = json.dumps({'query': query, 'top_k': 5, 'language': 'hi'}).encode('utf-8')
 req = urllib.request.Request(
